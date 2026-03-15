@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+/* ================================
+   CSS Variables (Dark Cyberpunk Theme)
+================================ */
+:root {
+  --background: #030303;
+  --foreground: #e2e8f0;
+
+  --primary: #00ffcc; /* Neon Cyan */
+  --primary-foreground: #000000;
+
+  --secondary: #121212;
+  --secondary-foreground: #a1a1aa;
+
+  --accent: #ff0055; /* Hot Pink */
+  
+  --border: #27272a;
+  --radius: 0px; /* Sharp corners for technical aesthetic */
+  
+  --font-display: var(--font-chakra-petch);
+  --font-mono: var(--font-jetbrains-mono);
+}
+
+/* Tailwind Theme Mapping */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-accent: var(--accent);
+
+  --color-border: var(--border);
+
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+/* ================================
+   Base Styles
+================================ */
+* {
+  border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, sans-serif;
+  min-height: 100vh;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  
+  /* Subtle grid background */
+  background-image: 
+    linear-gradient(to right, #ffffff05 1px, transparent 1px),
+    linear-gradient(to bottom, #ffffff05 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ================================
+   Typography Defaults
+================================ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  color: #ffffff;
+}
+
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+p {
+  line-height: 1.6;
+}
+
+/* ================================
+   Reusable Utility Classes
+================================ */
+.container-default {
+  @apply w-full max-w-7xl mx-auto px-6 py-4;
+}
+
+.panel {
+  background: rgba(18, 18, 18, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 100%;
+  background: var(--primary);
+  opacity: 0.5;
+}
+
+.button-primary {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.75rem 1.5rem;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 255, 204, 0.1), inset 0 0 0 0 var(--primary);
+}
+
+.button-primary:hover {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.4), inset 0 0 20px rgba(0, 255, 204, 0.4);
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
