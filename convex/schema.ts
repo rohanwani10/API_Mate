@@ -13,6 +13,7 @@ export default defineSchema({
     projectId: v.id("projects"),
     name: v.string(),
     path: v.string(), // e.g., "/users"
+    isDisabled: v.optional(v.boolean()), // For toggling mock endpoints off
   }).index("by_projectId", ["projectId"]),
   
   versions: defineTable({

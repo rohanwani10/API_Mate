@@ -254,3 +254,75 @@ export const createVersion = mutation({
     return versionId;
   },
 });
+
+export const toggleContractStatus = mutation({
+  args: { contractId: v.id("contracts") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const contract = await ctx.db.get(args.contractId);
+    if (!contract) throw new Error("Contract not found");
+
+    const project = await ctx.db.get(contract.projectId);
+    if (!project || project.userId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    await ctx.db.patch(args.contractId, {
+      isDisabled: !contract.isDisabled,
+    });
+
+    return { success: true, isDisabled: !contract.isDisabled };
+  },
+});
+
+export const restoreVersion = mutation({
+  args: { contractId: v.id("contracts"), versionNumber: v.number() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const contract = await ctx.db.get(args.contractId);
+    if (!contract) throw new Error("Contract not found");
+
+    const project = await ctx.db.get(contract.projectId);
+    if (!project || project.userId !== identity.subject) {
+      throw new Error("Unauthorized");
+    }
+
+    // Get the schema to restore
+    const versionToRestore = await ctx.db
+      .query("versions")
+      .withIndex("by_contractId_version", (q) => 
+         q.eq("contractId", args.contractId).eq("versionNumber", args.versionNumber)
+      )
+      .first();
+
+    if (!versionToRestore) throw new Error("Version not found");
+
+    // Get latest version number
+    const latestVersion = await ctx.db
+      .query("versions")
+      .withIndex("by_contractId", (q) => q.eq("contractId", args.contractId))
+      .order("desc")
+      .first();
+
+    const newVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+    // Detect breaking changes between latest and restored
+    let breakingChanges: any[] = [];
+    if (latestVersion) {
+      breakingChanges = detectBreakingChanges(latestVersion.schema, versionToRestore.schema);
+    }
+
+    const versionId = await ctx.db.insert("versions", {
+      contractId: args.contractId,
+      versionNumber: newVersionNumber,
+      schema: versionToRestore.schema,
+      breakingChanges: breakingChanges.length > 0 ? breakingChanges : undefined,
+    });
+
+    return versionId;
+  },
+});

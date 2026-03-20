@@ -58,6 +58,10 @@ async function getVersionSchema(
       return { schema: {}, error: "Version not found", status: 404 };
     }
 
+    if (schemaData.isDisabled) {
+      return { schema: {}, error: "This endpoint has been disabled by the owner.", status: 403 };
+    }
+
     return { schema: JSON.parse(schemaData.schema) };
   } catch (e) {
     return { schema: {}, error: "Invalid contract or version ID formatting", status: 400 };

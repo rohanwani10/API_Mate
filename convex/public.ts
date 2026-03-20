@@ -7,6 +7,13 @@ export const getVersionSchema = query({
     // This is a public query meant to be consumed by the Mock API Route
     // In a production app, we would add an API Key check here.
 
+    const contract = await ctx.db.get(args.contractId);
+    if (!contract) return null;
+    
+    if (contract.isDisabled) {
+      return { isDisabled: true, schema: "{}" };
+    }
+
     const version = await ctx.db
       .query("versions")
       .withIndex("by_contractId_version", (q) => 
@@ -20,6 +27,7 @@ export const getVersionSchema = query({
 
     return {
       schema: version.schema,
+      isDisabled: false
     };
   },
 });
