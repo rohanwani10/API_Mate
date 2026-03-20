@@ -1,23 +1,26 @@
 import type { Metadata } from "next";
-import { Chakra_Petch, JetBrains_Mono } from "next/font/google";
+import { DM_Sans, DM_Mono } from "next/font/google";
 import "./globals.css";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
 import { ClerkProvider } from "@clerk/nextjs";
 
-const chakraPetch = Chakra_Petch({
-  variable: "--font-chakra-petch",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
-const jetBrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
+const dmMono = DM_Mono({
+  variable: "--font-dm-mono",
   subsets: ["latin"],
+  weight: ["300", "400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "ApiMate | API Contract Guardian",
-  description: "AI-assisted, contract-first platform for schema versioning and mock generation.",
+  title: "ApiMate — Build Frontends Before Backends Exist",
+  description:
+    "Generate dynamic mock APIs from JSON schemas instantly. Build your frontend before the backend is ready.",
   icons: {
     icon: "/convex.svg",
   },
@@ -29,9 +32,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body
-        className={`${chakraPetch.variable} ${jetBrainsMono.variable} antialiased`}
+        className={`${dmSans.variable} ${dmMono.variable} antialiased`}
+        style={{ fontFamily: "var(--font-dm-sans), -apple-system, BlinkMacSystemFont, sans-serif" }}
       >
         <ClerkProvider dynamic>
           <ConvexClientProvider>{children}</ConvexClientProvider>
