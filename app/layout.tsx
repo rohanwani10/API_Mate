@@ -22,7 +22,9 @@ export const metadata: Metadata = {
   description:
     "Generate dynamic mock APIs from JSON schemas instantly. Build your frontend before the backend is ready.",
   icons: {
-    icon: "/API MATE.png",
+    icon:
+      { url: "/API MATE.png", sizes: "16x16 32x32", type: "image/png" },
+
   },
 };
 

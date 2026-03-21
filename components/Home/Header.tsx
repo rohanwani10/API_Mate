@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import { SignInButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import Image from "next/image";
 
 export default function Header() {
   const [scrolled, setScrolled] = useState(false);
@@ -44,13 +45,12 @@ export default function Header() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              boxShadow: "0 2px 10px rgba(0,113,227,0.35)",
+              // boxShadow: "0 2px 10px rgba(0,113,227,0.35)",
               flexShrink: 0,
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M3 9h12M9 3l6 6-6 6" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
+            {/* Use the image as logo from the public folder */}
+            <Image src="/API MATE.png" alt="Logo" width={36} height={36} />
           </div>
           <span style={{ fontWeight: 700, fontSize: "1.08rem", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
             ApiMate
