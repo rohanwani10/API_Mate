@@ -164,22 +164,13 @@ function generateSmartMock(schema: any, propName: string = ""): any {
 
 export async function GET(
   request: NextRequest,
-  context: { params: { contractId: string; version: string } }
+  context: { params: Promise<{ contractId: string; version: string }> }
 ) {
   if (!checkRateLimit(request)) {
     return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
   }
 
-  let contractId, version;
-  try {
-    const paramsResult = await context.params;
-    contractId = paramsResult.contractId;
-    version = paramsResult.version;
-  } catch (err) {
-    // some next setups don't need await for context.params
-    contractId = context.params.contractId;
-    version = context.params.version;
-  }
+  const { contractId, version } = await context.params;
 
   const { schema, error, status } = await getVersionSchema(contractId, version);
   if (error) {
@@ -256,21 +247,13 @@ Return corrected JSON only.`;
 
 export async function POST(
   request: NextRequest,
-  context: { params: { contractId: string; version: string } }
+  context: { params: Promise<{ contractId: string; version: string }> }
 ) {
   if (!checkRateLimit(request)) {
     return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
   }
 
-  let contractId, version;
-  try {
-    const paramsResult = await context.params;
-    contractId = paramsResult.contractId;
-    version = paramsResult.version;
-  } catch (err) {
-    contractId = context.params.contractId;
-    version = context.params.version;
-  }
+  const { contractId, version } = await context.params;
 
   const { schema, error, status } = await getVersionSchema(contractId, version);
   if (error) {
@@ -350,7 +333,7 @@ export async function POST(
 
 export async function PUT(
   request: NextRequest,
-  context: { params: { contractId: string; version: string } }
+  context: { params: Promise<{ contractId: string; version: string }> }
 ) {
   return POST(request, context);
 }
