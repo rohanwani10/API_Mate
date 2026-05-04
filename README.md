@@ -14,7 +14,7 @@ ApiMate is a contract-first mock API platform. Define a JSON Schema, publish it,
 [![Gemini](https://img.shields.io/badge/Gemini-2.5_Flash-blue?logo=google)](https://ai.google.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-[Live Demo](#) · [Report Bug](issues) · [Request Feature](issues)
+[Live Demo](https://api-mate-gamma.vercel.app) · [Report Bug](issues) · [Request Feature](issues)
 
 </div>
 
