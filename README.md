@@ -89,10 +89,10 @@ Click **Publish Version**. ApiMate:
 The published version is immediately live:
 
 ```bash
-GET /api/mock/{contractId}/{versionNumber}
+GET /api/mock/{contractId}/{versionNumber}/{path}
 # → Returns realistic fake data matching your schema
 
-POST /api/mock/{contractId}/{versionNumber}
+POST /api/mock/{contractId}/{versionNumber}/{path}
 # → Validates your payload against the schema
 # → Returns AJV errors + AI-suggested fix on failure
 ```
@@ -110,10 +110,13 @@ Switch to the **Dart** or **Java** tab to get model classes generated from your 
 | Schema Versioning | Immutable, sequential versions with full history |
 | Breaking Change Detection | Auto-detects type changes, removed fields, new required fields |
 | AI Schema Generation | Describe changes in English, Gemini writes the schema |
+| AI Security Hardening | Input sanitization, prompt delimiters, system instructions, length limits |
+| Two-Stage Mock Data | Fast rule-based generation + optional Gemini enhancement |
 | Live Mock Endpoints | GET returns fake data, POST validates payloads |
+| Intelligent Validation | AJV errors + AI-generated corrected payload suggestions |
 | Code Generation | Dart and Java model classes from any schema |
 | Version Restore | Restore any previous version as a new version |
-| Toggle Endpoints | Disable/enable mock endpoints per contract |
+| Endpoint Controls | Disable/enable mock endpoints per contract from Settings |
 | Auth & Ownership | All projects are private to the authenticated user |
 
 ---
@@ -147,9 +150,10 @@ Switch to the **Dart** or **Java** tab to get model classes generated from your 
            ▼
 ┌──────────────────────────────────────────────────────────┐
 │              Next.js API Route (Mock Endpoint)            │
-│  /api/mock/[contractId]/[version]                        │
+│  /api/mock/[contractId]/[version]/[...path]             │
 │                                                          │
-│  GET  → json-schema-faker → realistic mock data          │
+│  GET  → Stage 1: Rule-based mock → Stage 2: Gemini      │
+│         enhancement (realistic mode) → return data       │
 │  POST → AJV validation → error + Gemini fix suggestion   │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -157,24 +161,79 @@ Switch to the **Dart** or **Java** tab to get model classes generated from your 
 ### Request Flow — Mock Endpoint (GET)
 
 ```
-Client GET /api/mock/{contractId}/{version}
+Client GET /api/mock/{contractId}/{version}/{path}?count=10&mode=realistic
   → Rate limit check (100 req/IP/60s)
   → Fetch schema from Convex (public.getVersionSchema)
-  → Parse JSON Schema
-  → json-schema-faker.generate(schema)
-  → Return { data: [...], meta: { contractId, version } }
+  → Check if endpoint is disabled
+  → Parse query params (count, mode)
+  → Stage 1: Rule-based mock generation (generateSmartMock)
+      - Smart defaults based on field names (email, name, price, etc.)
+      - Handles objects, arrays, primitives
+  → Stage 2 (if mode=realistic & schema < 8KB):
+      - Gemini 2.0-flash enhancement for realistic data
+      - Fallback to Stage 1 if Gemini fails
+  → Return enhanced mock data
 ```
 
-### Request Flow — Mock Endpoint (POST)
+### Request Flow — Mock Endpoint (POST / PUT)
 
 ```
 Client POST /api/mock/{contractId}/{version}  { body }
+  → Rate limit check (100 req/IP/60s)
   → Fetch schema from Convex
   → AJV.validate(schema, body)
-  → If valid: return { valid: true }
-  → If invalid: Gemini suggests corrected payload
-  → Return { valid: false, errors: [...], suggestion: {...} }
+  → If valid: return { success: true, validatedAt: "..." }
+  → If invalid:
+      - Gemini 2.0-flash suggests a corrected payload and explanation
+      - Fallback: return errors only if Gemini fails
+  → Return { error, details: [...], properResponse: {...}, explanation: "..." }
+
+PUT is an alias for POST — identical validation semantics.
 ```
+
+### AI Security & Prompt Injection Protection
+
+ApiMate uses multiple defensive layers to prevent prompt injection attacks:
+
+#### convex/ai.ts (Schema Generation)
+- **Input length cap**: User instructions limited to 500 characters
+- **Input sanitization**: Strips backticks, angle brackets, newlines, and collapses whitespace
+- **System instructions**: Set at API level (cannot be overridden by user prompts)
+- **Prompt delimiters**: User input wrapped in `--- INSTRUCTION START/END ---` blocks
+- **Separation of concerns**: Current schema (trusted) and user instruction (untrusted) sent in separate sections
+- **Output validation**: Verifies response is a JSON object, not array or primitive
+
+#### app/api/mock/.../route.ts (Mock Data & Validation)
+- **Schema size guard**: Skips AI enhancement if schema exceeds 8KB (prevents token abuse)
+- **Structured prompts**: Schema, user payload, and validation errors each placed in delimited blocks
+- **System role enforcement**: Model configured with `systemInstruction` and `responseMimeType`
+- **Graceful fallbacks**: If Gemini fails, returns rule-based mock or raw AJV errors
+- **Rate limiting**: 100 requests per IP per 60 seconds with automatic cleanup
+
+### Two-Stage Mock Data Generation
+
+Mock data is generated in two stages to balance speed, cost, and realism:
+
+#### Stage 1 — Rule-Based Generation (Always)
+The `generateSmartMock()` function produces mock data using field name heuristics:
+- **Email fields**: `user123@gmail.com`
+- **Name fields**: `John`, `Doe`, `Wireless Bluetooth Headphones`
+- **Prices**: Random values between 100–5000
+- **Dates/Times**: ISO 8601 formatted timestamps
+- **UUIDs**: Standard UUID v4 format
+- **Status**: `"active"`
+- **URLs**: `https://example.com/...`
+
+This stage runs instantly, has zero AI cost, and always succeeds.
+
+#### Stage 2 — Gemini Enhancement (Conditional)
+If the client requests `mode=realistic` (default) and the schema is under 8KB:
+- Gemini 2.0-flash refines the baseline mock data for realism
+- Preserves structure and field names
+- Replaces placeholder values with believable fake data
+- Falls back to Stage 1 if Gemini fails or times out
+
+Clients can bypass Stage 2 by setting `?mode=fast` for instant responses.
 
 ---
 
@@ -187,13 +246,14 @@ apimate/
 │   │   └── mock/
 │   │       └── [contractId]/
 │   │           └── [version]/
-│   │               └── route.ts          # Mock data & validation endpoint
+│   │               └── [...path]/
+│   │                   └── route.ts      # Mock data & validation endpoint
 │   ├── dashboard/
 │   │   ├── layout.tsx                    # Dashboard shell with sidebar
 │   │   ├── page.tsx                      # Projects list
 │   │   ├── CreateProjectModal.tsx        # New project modal
 │   │   ├── settings/
-│   │   │   └── page.tsx                  # Settings page
+│   │   │   └── page.tsx                  # Settings page (endpoint controls + version restore)
 │   │   └── [projectId]/
 │   │       ├── page.tsx                  # Project detail + contract list
 │   │       └── [contractId]/
@@ -218,7 +278,7 @@ apimate/
 ├── convex/
 │   ├── schema.ts                         # Database schema (projects/contracts/versions)
 │   ├── contracts.ts                      # All project/contract/version mutations & queries
-│   ├── ai.ts                             # Gemini schema generation action
+│   ├── ai.ts                             # Gemini schema generation action (2.5-flash)
 │   ├── public.ts                         # Public queries for mock API route
 │   ├── utils.ts                          # Breaking change detection logic
 │   ├── auth.config.ts                    # Clerk auth configuration for Convex
@@ -359,9 +419,8 @@ The project was built in phases, each delivering a working slice of functionalit
 | Language | TypeScript | 5.9.3 | Type safety |
 | Backend | Convex | 1.31.7 | Serverless DB + real-time functions |
 | Auth | Clerk | 6.37.3 | OAuth, user management |
-| AI | @google/generative-ai | 0.24.1 | Gemini 2.5 Flash |
-| Mock Data | json-schema-faker | 0.6.0 | Schema → fake data |
-| Fake Data | @faker-js/faker | 8.0.0 | Realistic values |
+| AI | @google/generative-ai | 0.24.1 | Gemini 2.5-flash (schema gen) + 2.0-flash (mock/validation) |
+| Mock Data | @faker-js/faker | 8.0.0 | Realistic values |
 | Validation | AJV + ajv-formats | 8.18.0 | JSON Schema validation |
 | Styling | Tailwind CSS | 4.1.18 | Utility classes |
 | Icons | Lucide React | 0.576.0 | Icon set |
@@ -435,39 +494,45 @@ GEMINI_API_KEY=AIza...
 
 ### Mock Endpoint — GET
 
-Returns realistic mock data matching the published schema.
+Returns mock data matching the published schema. The `{path}` segment mirrors the contract's configured API path and can be any depth (e.g. `/api/users/profile`).
 
 ```
-GET /api/mock/{contractId}/{versionNumber}
+GET /api/mock/{contractId}/{versionNumber}/{path}
 ```
+
+**Query Parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `count` | integer | — | Number of items to generate. Maximum 50. Only meaningful for object-type schemas. |
+| `mode` | string | `realistic` | `realistic` — Gemini-enhanced data (default). `fast` — Rule-based only, instant response. |
 
 **Response 200**
 ```json
-{
-  "data": [
-    { "id": 1847, "name": "Jordan Lee", "email": "j.lee@acme.io", "role": "admin" },
-    { "id": 2031, "name": "Sam Rivera", "email": "s.rivera@acme.io", "role": "user" }
-  ],
-  "meta": {
-    "contractId": "abc123",
-    "version": 1,
-    "generatedAt": "2026-05-04T10:00:00Z"
-  }
-}
+{ "id": 1847, "name": "Jordan Lee", "email": "j.lee@acme.io", "role": "admin" }
 ```
 
+With `?count=2`:
+```json
+[
+  { "id": 1847, "name": "Jordan Lee", "email": "j.lee@acme.io", "role": "admin" },
+  { "id": 2031, "name": "Sam Rivera", "email": "s.rivera@acme.io", "role": "user" }
+]
+```
+
+**Response 400** — Invalid `count` parameter  
+**Response 403** — Endpoint is disabled  
 **Response 404** — Contract or version not found  
-**Response 429** — Rate limit exceeded (100 req/IP/60s)  
-**Response 503** — Contract endpoint is disabled
+**Response 429** — Rate limit exceeded (100 req/IP/60s)
 
 ---
 
-### Mock Endpoint — POST
+### Mock Endpoint — POST / PUT
 
-Validates a request body against the published schema.
+Validates a request body against the published schema. On failure, Gemini 2.0-flash suggests a corrected payload.
 
 ```
-POST /api/mock/{contractId}/{versionNumber}
+POST /api/mock/{contractId}/{versionNumber}/{path}
 Content-Type: application/json
 
 { ...your payload... }
@@ -475,24 +540,33 @@ Content-Type: application/json
 
 **Response 200 — Valid**
 ```json
-{ "valid": true }
+{
+  "success": true,
+  "message": "Payload strictly matches the contract",
+  "validatedAt": "2026-07-03T07:10:00.000Z"
+}
 ```
 
-**Response 422 — Invalid**
+**Response 400 — Invalid**
 ```json
 {
-  "valid": false,
-  "errors": [
+  "error": "Contract Mismatch",
+  "details": [
     { "instancePath": "/email", "message": "must match format \"email\"" }
   ],
-  "suggestion": {
+  "properResponse": {
     "id": 1,
     "name": "Alex Kim",
     "email": "alex.kim@example.com",
     "role": "user"
-  }
+  },
+  "explanation": "The email field was missing a valid format. Updated to a properly formatted address."
 }
 ```
+
+> If Gemini is unavailable, the response omits `properResponse` and `explanation` and returns only `error` and `details`.
+
+**PUT** is an alias for POST with identical validation semantics.
 
 ---
 
