@@ -73,9 +73,14 @@ export default function SchemaWorkspace({
   const handleAskAi = async () => {
     if (!chatInput.trim()) return;
     setIsAiLoading(true);
-    const prompt = `Here is the current schema:\n\n${schemaInput}\n\nUser Request: ${chatInput}`;
     try {
-      const newSchema = await generateSchema({ prompt });
+      // Pass the user instruction and the current schema as separate arguments.
+      // This keeps the 500-char cap enforced on the instruction only — the schema
+      // is trusted content from our own editor state and is handled separately.
+      const newSchema = await generateSchema({
+        instruction: chatInput,
+        currentSchema: schemaInput,
+      });
       setSchemaInput(newSchema);
       setChatInput("");
     } catch (e) {
@@ -282,7 +287,7 @@ export default function SchemaWorkspace({
                       <div className="flex items-center gap-3 mb-3">
                         <span className="bg-[#30d158]/15 text-[#1e9d3b] px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider">GET</span>
                         <span className="font-mono text-[0.85rem] text-[var(--text-primary)] break-all font-medium">
-                          {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}
+                          {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}{contract.path}
                         </span>
                       </div>
                       <p className="m-0 text-[0.85rem] text-[var(--text-secondary)] leading-relaxed">
@@ -295,7 +300,7 @@ export default function SchemaWorkspace({
                       <div className="flex items-center gap-3 mb-3">
                         <span className="bg-[#0071e3]/15 text-[var(--accent)] px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider">POST</span>
                         <span className="font-mono text-[0.85rem] text-[var(--text-primary)] break-all font-medium">
-                          {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}
+                          {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}{contract.path}
                         </span>
                       </div>
                       <p className="m-0 text-[0.85rem] text-[var(--text-secondary)] leading-relaxed">

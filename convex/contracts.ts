@@ -149,8 +149,11 @@ export const getContracts = query({
     }
     
     const project = await ctx.db.get(args.projectId);
-    if (!project || project.userId !== identity.subject) {
-      throw new Error("Unauthorized");
+    // Return empty array instead of throwing — a thrown error from a query
+    // surfaces as an unhandled exception in the React component (blank screen).
+    // Callers should treat [] as "no access / not found".
+    if (!project || (project.userId !== identity.subject && project.createdBy !== identity.subject)) {
+      return [];
     }
 
     return await ctx.db
