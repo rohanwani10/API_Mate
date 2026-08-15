@@ -442,13 +442,22 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  return withVersionSchema(request, context, (schema) =>
-    validateBodyAgainstSchema(request, schema, {
-      successStatus: 201,
-      successMessage: "Payload matches the contract. Resource created.",
-      strict: true,
-    })
-  );
+  if (!checkRateLimit(request)) {
+    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  }
+
+  const { contractId, version } = await context.params;
+
+  const { schema, error, status } = await getVersionSchema(contractId, version);
+  if (error) {
+    return NextResponse.json({ error }, { status });
+  }
+
+  return validateBodyAgainstSchema(request, schema, {
+    successStatus: 201,
+    successMessage: "Payload matches the contract. Resource created.",
+    strict: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -458,13 +467,22 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  return withVersionSchema(request, context, (schema) =>
-    validateBodyAgainstSchema(request, schema, {
-      successStatus: 200,
-      successMessage: "Payload matches the contract. Resource replaced.",
-      strict: true,
-    })
-  );
+  if (!checkRateLimit(request)) {
+    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  }
+
+  const { contractId, version } = await context.params;
+
+  const { schema, error, status } = await getVersionSchema(contractId, version);
+  if (error) {
+    return NextResponse.json({ error }, { status });
+  }
+
+  return validateBodyAgainstSchema(request, schema, {
+    successStatus: 200,
+    successMessage: "Payload matches the contract. Resource replaced.",
+    strict: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -476,13 +494,22 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  return withVersionSchema(request, context, (schema) =>
-    validateBodyAgainstSchema(request, schema, {
-      successStatus: 200,
-      successMessage: "Payload matches the contract. Resource partially updated.",
-      strict: false,
-    })
-  );
+  if (!checkRateLimit(request)) {
+    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  }
+
+  const { contractId, version } = await context.params;
+
+  const { schema, error, status } = await getVersionSchema(contractId, version);
+  if (error) {
+    return NextResponse.json({ error }, { status });
+  }
+
+  return validateBodyAgainstSchema(request, schema, {
+    successStatus: 200,
+    successMessage: "Payload matches the contract. Resource partially updated.",
+    strict: false,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -493,14 +520,23 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  return withVersionSchema(request, context, async () =>
-    NextResponse.json(
-      {
-        success: true,
-        message: "Resource deleted.",
-        deletedAt: new Date().toISOString(),
-      },
-      { status: 200 }
-    )
+  if (!checkRateLimit(request)) {
+    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+  }
+
+  const { contractId, version } = await context.params;
+
+  const { error, status } = await getVersionSchema(contractId, version);
+  if (error) {
+    return NextResponse.json({ error }, { status });
+  }
+
+  return NextResponse.json(
+    {
+      success: true,
+      message: "Resource deleted.",
+      deletedAt: new Date().toISOString(),
+    },
+    { status: 200 }
   );
 }
