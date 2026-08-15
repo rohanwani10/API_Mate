@@ -282,31 +282,50 @@ export default function SchemaWorkspace({
                 
                 {latestVersion ? (
                   <div className="flex flex-col gap-5">
-                    {/* GET Endpoint */}
-                    <div className="bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-[var(--radius-lg)] p-5 shadow-sm transition-hover hover:border-[var(--accent-glow)]">
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="bg-[#30d158]/15 text-[#1e9d3b] px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider">GET</span>
-                        <span className="font-mono text-[0.85rem] text-[var(--text-primary)] break-all font-medium">
-                          {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}{contract.path}
-                        </span>
+                    {[
+                      {
+                        method: "GET",
+                        badgeClass: "bg-[#30d158]/15 text-[#1e9d3b]",
+                        desc: `Generates random mock data matching schema v${latestVersion.versionNumber}`,
+                      },
+                      {
+                        method: "POST",
+                        badgeClass: "bg-[#0071e3]/15 text-[var(--accent)]",
+                        desc: `Validates the full payload against schema v${latestVersion.versionNumber}; creates the resource on success`,
+                      },
+                      {
+                        method: "PUT",
+                        badgeClass: "bg-[#0071e3]/15 text-[var(--accent)]",
+                        desc: `Validates the full payload against schema v${latestVersion.versionNumber}; replaces the resource on success`,
+                      },
+                      {
+                        method: "PATCH",
+                        badgeClass: "bg-[#ff9f0a]/15 text-[#b26b00]",
+                        desc: `Validates only the submitted fields against schema v${latestVersion.versionNumber}; partially updates the resource`,
+                      },
+                      {
+                        method: "DELETE",
+                        badgeClass: "bg-[#ff3b30]/15 text-[#d70015]",
+                        desc: `Simulates deleting the resource defined by schema v${latestVersion.versionNumber}`,
+                      },
+                    ].map((ep) => (
+                      <div
+                        key={ep.method}
+                        className="bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-[var(--radius-lg)] p-5 shadow-sm transition-hover hover:border-[var(--accent-glow)]"
+                      >
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className={`${ep.badgeClass} px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider`}>
+                            {ep.method}
+                          </span>
+                          <span className="font-mono text-[0.85rem] text-[var(--text-primary)] break-all font-medium">
+                            {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}{contract.path}
+                          </span>
+                        </div>
+                        <p className="m-0 text-[0.85rem] text-[var(--text-secondary)] leading-relaxed">
+                          {ep.desc}
+                        </p>
                       </div>
-                      <p className="m-0 text-[0.85rem] text-[var(--text-secondary)] leading-relaxed">
-                        Generates random mock data matching schema v{latestVersion.versionNumber}
-                      </p>
-                    </div>
-
-                    {/* POST Endpoint */}
-                    <div className="bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-[var(--radius-lg)] p-5 shadow-sm transition-hover hover:border-[var(--accent-glow)]">
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className="bg-[#0071e3]/15 text-[var(--accent)] px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider">POST</span>
-                        <span className="font-mono text-[0.85rem] text-[var(--text-primary)] break-all font-medium">
-                          {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}{contract.path}
-                        </span>
-                      </div>
-                      <p className="m-0 text-[0.85rem] text-[var(--text-secondary)] leading-relaxed">
-                        Validates incoming request payload against schema v{latestVersion.versionNumber}
-                      </p>
-                    </div>
+                    ))}
                   </div>
                 ) : (
                   <div className="bg-orange-50/50 border border-orange-200 text-orange-700 p-5 rounded-[var(--radius-lg)] text-[0.95rem] font-medium flex items-center gap-3 shadow-sm">
