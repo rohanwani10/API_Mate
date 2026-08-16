@@ -1,6 +1,51 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { detectBreakingChanges } from "./utils";
+import { Id } from "./_generated/dataModel";
+import {
+  BreakingChange,
+  detectBreakingChanges,
+  findUnsafeSchemaPatterns,
+  getSchemaDepth,
+  isDeepEqualIgnoringKeyOrder,
+  MAX_SCHEMA_DEPTH,
+  MAX_SCHEMA_LENGTH,
+} from "./utils";
+
+// Shared publish path used by both createVersion and restoreVersion: looks
+// up the latest version for a contract, computes the next version number,
+// runs breaking-change detection against the latest version, and inserts
+// the new versions row. createVersion runs its own pre-checks (JSON parse
+// validation, object-type check, safety limits, and the "no schema changes
+// detected" no-op guard) before calling this — those are specific to
+// publishing a hand-edited schema and don't apply to a restore, which
+// simply republishes an already-validated, previously-stored schema.
+async function insertNewVersion(
+  ctx: MutationCtx,
+  contractId: Id<"contracts">,
+  schemaString: string
+) {
+  const latestVersion = await ctx.db
+    .query("versions")
+    .withIndex("by_contractId", (q) => q.eq("contractId", contractId))
+    .order("desc")
+    .first();
+
+  const newVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
+
+  let breakingChanges: BreakingChange[] = [];
+  if (latestVersion) {
+    breakingChanges = detectBreakingChanges(latestVersion.schema, schemaString);
+  }
+
+  const versionId = await ctx.db.insert("versions", {
+    contractId,
+    versionNumber: newVersionNumber,
+    schema: schemaString,
+    breakingChanges: breakingChanges.length > 0 ? breakingChanges : undefined,
+  });
+
+  return versionId;
+}
 
 export const createProject = mutation({
   args: { name: v.string() },
@@ -127,7 +172,7 @@ export const createContract = mutation({
     }
     
     const project = await ctx.db.get(args.projectId);
-    if (!project || project.userId !== identity.subject) {
+    if (!project || (project.userId !== identity.subject && project.createdBy !== identity.subject)) {
       throw new Error("Unauthorized");
     }
 
@@ -175,7 +220,7 @@ export const getContractWithVersions = query({
     if (!contract) return null;
 
     const project = await ctx.db.get(contract.projectId);
-    if (!project || project.userId !== identity.subject) {
+    if (!project || (project.userId !== identity.subject && project.createdBy !== identity.subject)) {
       return null;
     }
 
@@ -201,37 +246,60 @@ export const createVersion = mutation({
     if (!contract) throw new Error("Contract not found");
 
     const project = await ctx.db.get(contract.projectId);
-    if (!project || project.userId !== identity.subject) {
+    if (!project || (project.userId !== identity.subject && project.createdBy !== identity.subject)) {
       throw new Error("Unauthorized");
     }
 
     // Verify it's a valid JSON object
+    let parsedNew: any;
     try {
-      const parsed = JSON.parse(args.schema);
-      if (typeof parsed !== "object" || Array.isArray(parsed) || parsed === null) {
-        throw new Error("SCHEMA_TYPE_ERROR: Expected a JSON object but received " + (Array.isArray(parsed) ? "an array" : typeof parsed));
+      parsedNew = JSON.parse(args.schema);
+      if (typeof parsedNew !== "object" || Array.isArray(parsedNew) || parsedNew === null) {
+        throw new Error("SCHEMA_TYPE_ERROR: Expected a JSON object but received " + (Array.isArray(parsedNew) ? "an array" : typeof parsedNew));
       }
     } catch (e: any) {
       if (e.message?.startsWith("SCHEMA_TYPE_ERROR")) throw e;
       throw new Error("JSON_PARSE_ERROR: " + e.message);
     }
 
-    // Get the latest version to determine breaking changes and the new version number
+    // Publish-time safety limits: size cap, nesting-depth cap, and a
+    // heuristic scan for catastrophic-backtracking regex patterns. These
+    // exist so a pathologically large/deep schema can't bloat storage or
+    // stack-overflow the breaking-change diff, and so an obviously
+    // dangerous `pattern` can't be published for AJV to later compile
+    // against public traffic.
+    if (args.schema.length > MAX_SCHEMA_LENGTH) {
+      throw new Error(
+        `SCHEMA_TOO_LARGE: Schema is ${args.schema.length} characters, which exceeds the ${MAX_SCHEMA_LENGTH} character limit.`
+      );
+    }
+
+    const schemaDepth = getSchemaDepth(parsedNew);
+    if (schemaDepth > MAX_SCHEMA_DEPTH) {
+      throw new Error(
+        `SCHEMA_TOO_DEEP: Schema nests ${schemaDepth} levels deep, which exceeds the ${MAX_SCHEMA_DEPTH} level limit.`
+      );
+    }
+
+    const unsafePatterns = findUnsafeSchemaPatterns(parsedNew);
+    if (unsafePatterns.length > 0) {
+      throw new Error(
+        `UNSAFE_REGEX_PATTERN: Schema contains a pattern that looks vulnerable to catastrophic backtracking: ${unsafePatterns[0]}`
+      );
+    }
+
+    // Get the latest version to check for a semantic no-op before publishing
     const latestVersion = await ctx.db
       .query("versions")
       .withIndex("by_contractId", (q) => q.eq("contractId", args.contractId))
       .order("desc")
       .first();
 
-    let newVersionNumber = 1;
-    let breakingChanges: any[] = [];
-
     if (latestVersion) {
-      // Compare semantically rather than exact string
+      // Compare semantically rather than exact string (key-order-insensitive)
       try {
         const parsedLatest = JSON.parse(latestVersion.schema);
-        const parsedNew = JSON.parse(args.schema);
-        if (JSON.stringify(parsedLatest) === JSON.stringify(parsedNew)) {
+        if (isDeepEqualIgnoringKeyOrder(parsedLatest, parsedNew)) {
            throw new Error("No schema changes detected from latest version");
         }
       } catch (e) {
@@ -243,18 +311,9 @@ export const createVersion = mutation({
            throw new Error("No schema changes detected from latest version");
         }
       }
-      newVersionNumber = latestVersion.versionNumber + 1;
-      breakingChanges = detectBreakingChanges(latestVersion.schema, args.schema);
     }
 
-    const versionId = await ctx.db.insert("versions", {
-      contractId: args.contractId,
-      versionNumber: newVersionNumber,
-      schema: args.schema,
-      breakingChanges: breakingChanges.length > 0 ? breakingChanges : undefined,
-    });
-
-    return versionId;
+    return await insertNewVersion(ctx, args.contractId, args.schema);
   },
 });
 
@@ -268,7 +327,7 @@ export const toggleContractStatus = mutation({
     if (!contract) throw new Error("Contract not found");
 
     const project = await ctx.db.get(contract.projectId);
-    if (!project || project.userId !== identity.subject) {
+    if (!project || (project.userId !== identity.subject && project.createdBy !== identity.subject)) {
       throw new Error("Unauthorized");
     }
 
@@ -290,42 +349,20 @@ export const restoreVersion = mutation({
     if (!contract) throw new Error("Contract not found");
 
     const project = await ctx.db.get(contract.projectId);
-    if (!project || project.userId !== identity.subject) {
+    if (!project || (project.userId !== identity.subject && project.createdBy !== identity.subject)) {
       throw new Error("Unauthorized");
     }
 
     // Get the schema to restore
     const versionToRestore = await ctx.db
       .query("versions")
-      .withIndex("by_contractId_version", (q) => 
+      .withIndex("by_contractId_version", (q) =>
          q.eq("contractId", args.contractId).eq("versionNumber", args.versionNumber)
       )
       .first();
 
     if (!versionToRestore) throw new Error("Version not found");
 
-    // Get latest version number
-    const latestVersion = await ctx.db
-      .query("versions")
-      .withIndex("by_contractId", (q) => q.eq("contractId", args.contractId))
-      .order("desc")
-      .first();
-
-    const newVersionNumber = latestVersion ? latestVersion.versionNumber + 1 : 1;
-
-    // Detect breaking changes between latest and restored
-    let breakingChanges: any[] = [];
-    if (latestVersion) {
-      breakingChanges = detectBreakingChanges(latestVersion.schema, versionToRestore.schema);
-    }
-
-    const versionId = await ctx.db.insert("versions", {
-      contractId: args.contractId,
-      versionNumber: newVersionNumber,
-      schema: versionToRestore.schema,
-      breakingChanges: breakingChanges.length > 0 ? breakingChanges : undefined,
-    });
-
-    return versionId;
+    return await insertNewVersion(ctx, args.contractId, versionToRestore.schema);
   },
 });
