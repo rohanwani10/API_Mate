@@ -418,6 +418,8 @@ pre {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
   animation: fadeIn 0.2s ease;
 }
 
@@ -426,9 +428,11 @@ pre {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-xl);
-  padding: 32px;
+  padding: clamp(20px, 5vw, 32px);
   width: 100%;
   max-width: 480px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   animation: fadeUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
