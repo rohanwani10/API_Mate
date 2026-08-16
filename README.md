@@ -24,6 +24,7 @@ Define a schema, publish it, and get a live mock API in seconds — no backend r
 - [Overview](#overview)
 - [Features](#features)
 - [How It Works](#how-it-works)
+- [Architecture at a Glance](#architecture-at-a-glance)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Using the Mock API](#using-the-mock-api)
@@ -100,6 +101,37 @@ Define Schema  →  Publish  →  Get a Live Endpoint  →  Build Your UI  →  
 ```
 
 </details>
+
+<br>
+
+## Architecture at a Glance
+
+```mermaid
+flowchart LR
+    Dev["👤 Developer"]
+
+    subgraph App["ApiMate"]
+        UI["Dashboard<br/>(schema editor)"]
+        Auth["Clerk<br/>authentication"]
+        DB[("Convex<br/>database & functions")]
+        AI["Gemini AI<br/>schema help & validation"]
+        Mock["Mock API<br/>/api/mock/..."]
+    end
+
+    Frontend["🖥️ Your Frontend App"]
+
+    Dev -- "signs in" --> Auth
+    Dev -- "writes & publishes schema" --> UI
+    UI --> Auth
+    UI -- "save version" --> DB
+    UI -- "generate / refine schema" --> AI
+    DB -- "serves published schema" --> Mock
+    Mock -- "enhance & validate" --> AI
+    Frontend -- "GET / POST requests" --> Mock
+    Mock -- "realistic mock data" --> Frontend
+```
+
+Everything a schema needs — versioning, validation, and mock data — lives behind one endpoint your frontend can call like a real API. Deeper diagrams (data flow, security layers) are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 <br>
 
