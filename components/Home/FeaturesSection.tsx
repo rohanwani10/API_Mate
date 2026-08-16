@@ -75,11 +75,12 @@ export default function FeaturesSection() {
   return (
     <section
       id="features"
-      style={{ padding: "100px 0", background: "var(--bg-elevated)" }}
+      className="py-16 sm:py-20 lg:py-[100px]"
+      style={{ background: "var(--bg-elevated)" }}
     >
       <div className="container-default">
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 64 }}>
+        <div className="mb-10 sm:mb-16" style={{ textAlign: "center" }}>
           <div
             style={{
               display: "inline-flex",

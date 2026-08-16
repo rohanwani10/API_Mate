@@ -41,11 +41,10 @@ export default function HeroSection() {
         minHeight: "calc(100vh - 65px)",
         display: "flex",
         alignItems: "center",
-        padding: "80px 0 100px",
         position: "relative",
         overflow: "hidden",
       }}
-      className="gradient-bg-hero"
+      className="gradient-bg-hero py-16 sm:py-20 lg:py-[100px]"
     >
       {/* Decorative orbs */}
       <div
@@ -73,7 +72,7 @@ export default function HeroSection() {
         }}
       />
 
-      <div className="container-default" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "center" }}>
+      <div className="container-default grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16" style={{ alignItems: "center" }}>
         {/* Left: Text & CTAs */}
         <div>
           <div
@@ -150,7 +149,7 @@ export default function HeroSection() {
           </div>
 
           {/* Stats row */}
-          <div className="animate-fade-up animate-delay-4" style={{ display: "flex", gap: 32, marginTop: 48 }}>
+          <div className="animate-fade-up animate-delay-4 flex flex-wrap gap-6 sm:gap-8" style={{ marginTop: 48 }}>
             {[
               { value: "3s", label: "API generated" },
               { value: "100%", label: "No backend needed" },
@@ -212,9 +211,9 @@ export default function HeroSection() {
               </span>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2">
               {/* Schema input */}
-              <div style={{ padding: 20, borderRight: "1px solid var(--border)" }}>
+              <div className="border-b sm:border-b-0 sm:border-r" style={{ padding: 20 }}>
                 <div style={{ fontSize: "0.72rem", color: "var(--text-tertiary)", fontWeight: 600, letterSpacing: "0.08em", marginBottom: 10, textTransform: "uppercase" }}>
                   JSON Schema
                 </div>

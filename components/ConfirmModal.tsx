@@ -29,10 +29,10 @@ export default function ConfirmModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       {/* Modal Content */}
-      <div 
+      <div
         className="modal-card"
         onClick={(e) => e.stopPropagation()}
-        style={{ padding: 32, maxWidth: 420 }}
+        style={{ maxWidth: 420 }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>

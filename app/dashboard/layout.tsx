@@ -1,11 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import Sidebar from "@/components/Dashboard/Sidebar";
 import { Authenticated, Unauthenticated } from "convex/react";
 import { SignInButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { Menu } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "var(--bg-base)" }}>
       {/* Decorative background blur (Apple style) */}
@@ -25,25 +29,67 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       />
 
       <Authenticated>
-        <Sidebar />
-        <main
-          style={{
-            flex: 1,
-            position: "relative",
-            zIndex: 10,
-            padding: "40px",
-            maxHeight: "100vh",
-            overflowY: "auto",
-          }}
-        >
-          {children}
-        </main>
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          {/* Mobile top bar — hidden at lg and above, where the sidebar is always visible */}
+          <div
+            className="flex lg:hidden"
+            style={{
+              alignItems: "center",
+              gap: 12,
+              padding: "14px 16px",
+              position: "sticky",
+              top: 0,
+              zIndex: 20,
+              background: "var(--bg-sidebar)",
+              backdropFilter: "blur(20px) saturate(1.8)",
+              WebkitBackdropFilter: "blur(20px) saturate(1.8)",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            <button
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+              style={{
+                padding: 8,
+                background: "transparent",
+                border: "1px solid var(--border-strong)",
+                borderRadius: 8,
+                color: "var(--text-primary)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Menu size={18} />
+            </button>
+            <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+              ApiMate
+            </span>
+          </div>
+
+          <main
+            className="p-4 sm:p-6 lg:p-10"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              position: "relative",
+              zIndex: 10,
+              maxHeight: "100vh",
+              overflowY: "auto",
+            }}
+          >
+            {children}
+          </main>
+        </div>
       </Authenticated>
 
       <Unauthenticated>
         <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%" }}>
           {/* Minimal Header for logged out state */}
-          <header style={{ padding: "24px 40px", display: "flex", alignItems: "center" }}>
+          <header className="px-4 sm:px-10" style={{ padding: "24px 0", display: "flex", alignItems: "center" }}>
             <Link href="/" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
               <div
                 style={{
@@ -64,7 +110,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           </header>
 
-          <main style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+          <main className="px-4" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
             <div className="modal-card" style={{ textAlign: "center", maxWidth: 420 }}>
               <div
                 style={{
