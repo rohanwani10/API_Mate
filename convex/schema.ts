@@ -31,4 +31,13 @@ export default defineSchema({
     ),
   }).index("by_contractId", ["contractId"])
     .index("by_contractId_version", ["contractId", "versionNumber"]),
+
+  // Shared, cross-instance rate-limit counters for the public mock API route.
+  // Replaces the old in-memory Map so the "100 req/IP/60s" limit actually
+  // holds once the route is deployed across multiple serverless instances.
+  rateLimitCounters: defineTable({
+    ip: v.string(),
+    windowStart: v.number(), // ms epoch of the start of the current 60s window
+    count: v.number(),
+  }).index("by_ip", ["ip"]),
 });

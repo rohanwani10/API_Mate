@@ -12,6 +12,7 @@ import type * as ai from "../ai.js";
 import type * as contracts from "../contracts.js";
 import type * as myFunctions from "../myFunctions.js";
 import type * as public_ from "../public.js";
+import type * as rateLimit from "../rateLimit.js";
 import type * as utils from "../utils.js";
 
 import type {
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   contracts: typeof contracts;
   myFunctions: typeof myFunctions;
   public: typeof public_;
+  rateLimit: typeof rateLimit;
   utils: typeof utils;
 }>;
 
