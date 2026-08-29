@@ -171,26 +171,26 @@ export default function SchemaWorkspace({
   };
 
   return (
-    <div className="animate-fade-in flex flex-col h-[calc(100vh-120px)] z-10 w-full max-w-[1600px] mx-auto">
-      
+    <div className="animate-fade-in flex flex-col h-auto lg:h-[calc(100vh-120px)] z-10 w-full max-w-[1600px] mx-auto">
+
       {/* Top Banner (Always visible) */}
-      <div className="flex items-center justify-between border-b border-[var(--border)] pb-5 mb-5 shrink-0">
-        <div>
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[var(--border)] pb-5 mb-5 shrink-0">
+        <div className="min-w-0">
           <Link
             href={`/dashboard/${projectId}`}
             className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1.5 text-sm font-medium w-fit mb-3"
           >
             <ArrowLeft size={16} strokeWidth={2.5} /> Back to Project
           </Link>
-          <h1 className="text-3xl font-bold text-[var(--text-primary)] m-0 flex items-baseline gap-3 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--text-primary)] m-0 flex flex-wrap items-baseline gap-3 tracking-tight">
             {contract.name}
-            <span className="text-[var(--text-secondary)] text-sm font-mono font-medium px-2 py-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-md">
+            <span className="text-[var(--text-secondary)] text-sm font-mono font-medium px-2 py-1 bg-[var(--bg-elevated)] border border-[var(--border)] rounded-md break-all">
               {contract.path}
             </span>
           </h1>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {publishError && (
             <span className="text-red-600 text-xs bg-red-50 px-3 py-1.5 rounded-md font-semibold border border-red-100">
               {publishError}
@@ -199,7 +199,7 @@ export default function SchemaWorkspace({
           <button
             onClick={handlePublish}
             disabled={isPublishing}
-            className="button-primary h-[40px] px-6 text-sm"
+            className="button-primary h-[40px] px-6 text-sm w-full sm:w-auto"
           >
             {isPublishing ? "Publishing..." : "Publish Version"}
           </button>
@@ -210,15 +210,15 @@ export default function SchemaWorkspace({
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-0">
         
         {/* Left Column: Schema Editor & AI */}
-        <div className="panel flex flex-col h-full min-h-0 overflow-hidden shadow-[var(--shadow-sm)] border-[var(--border)] bg-[var(--bg-elevated)]">
+        <div className="panel flex flex-col h-[480px] lg:h-full min-h-0 overflow-hidden shadow-[var(--shadow-sm)] border-[var(--border)] bg-[var(--bg-elevated)]">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)] bg-[var(--bg-base)]">
             <span className="text-xs font-bold tracking-wider text-[var(--text-secondary)] uppercase flex items-center gap-2">
               <Code size={14} className="text-[var(--accent)]" />
               JSON Schema Editor
             </span>
           </div>
-          
-          <div className="flex-1 relative bg-[#fcfcfd]">
+
+          <div className="flex-1 relative bg-[#fcfcfd] min-h-0">
             <textarea
               value={schemaInput}
               onChange={(e) => setSchemaInput(e.target.value)}
@@ -257,7 +257,7 @@ export default function SchemaWorkspace({
         </div>
 
         {/* Right Column: Output & History */}
-        <div className="panel flex flex-col h-full min-h-0 overflow-hidden shadow-[var(--shadow-sm)] border-[var(--border)] bg-[var(--bg-elevated)]">
+        <div className="panel flex flex-col h-[480px] lg:h-full min-h-0 overflow-hidden shadow-[var(--shadow-sm)] border-[var(--border)] bg-[var(--bg-elevated)]">
           {/* Tabs */}
           <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--bg-base)] overflow-x-auto scrollbar-hide shrink-0">
             {TABS.map((tab) => (

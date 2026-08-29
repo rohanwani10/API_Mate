@@ -44,4 +44,12 @@ export default defineSchema({
     query: v.optional(v.string()),   // raw query string, e.g. "count=5&seed=demo"
     error: v.optional(v.string()),   // short reason for a non-2xx, truncated
   }).index("by_contractId", ["contractId"]),
+  // Shared, cross-instance rate-limit counters for the public mock API route.
+  // Replaces the old in-memory Map so the "100 req/IP/60s" limit actually
+  // holds once the route is deployed across multiple serverless instances.
+  rateLimitCounters: defineTable({
+    ip: v.string(),
+    windowStart: v.number(), // ms epoch of the start of the current 60s window
+    count: v.number(),
+  }).index("by_ip", ["ip"]),
 });

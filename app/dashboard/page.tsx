@@ -56,25 +56,23 @@ export default function DashboardIndex() {
       />
 
       {/* Header */}
-      <div 
-        style={{ 
-          display: "flex", 
-          alignItems: "center", 
-          justifyContent: "space-between",
+      <div
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        style={{
           marginBottom: 40,
         }}
       >
         <div>
-          <h1 style={{ fontSize: "2rem", marginBottom: 8, letterSpacing: "-0.03em" }}>
+          <h1 className="text-[1.6rem] sm:text-[2rem]" style={{ marginBottom: 8, letterSpacing: "-0.03em" }}>
             Projects
           </h1>
           <p style={{ color: "var(--text-secondary)", margin: 0 }}>
             Manage your mock API schemas and endpoints.
           </p>
         </div>
-        
-        <button 
-          className="button-primary"
+
+        <button
+          className="button-primary w-full sm:w-auto"
           onClick={() => setIsCreateOpen(true)}
           style={{ padding: "10px 20px" }}
         >
@@ -87,13 +85,7 @@ export default function DashboardIndex() {
       </div>
 
       {/* Projects Grid */}
-      <div 
-        style={{ 
-          display: "grid", 
-          gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", 
-          gap: 24 
-        }}
-      >
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
         {projects === undefined ? (
           // Loading states
           [1, 2, 3].map((n) => (

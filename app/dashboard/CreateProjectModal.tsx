@@ -34,10 +34,9 @@ export default function CreateProjectModal({ isOpen, onClose }: Props) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div 
+      <div
         className="modal-card"
         onClick={(e) => e.stopPropagation()}
-        style={{ padding: 40 }}
       >
         {/* Header */}
         <div style={{ marginBottom: 32 }}>

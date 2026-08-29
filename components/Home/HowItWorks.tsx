@@ -47,8 +47,8 @@ const steps = [
 function Arrow() {
   return (
     <div
+      className="hidden sm:flex"
       style={{
-        display: "flex",
         alignItems: "center",
         color: "var(--text-tertiary)",
         flexShrink: 0,
@@ -66,8 +66,8 @@ export default function HowItWorks() {
   return (
     <section
       id="how-it-works"
+      className="py-16 sm:py-20 lg:py-[100px]"
       style={{
-        padding: "100px 0",
         background: "var(--bg-base)",
         position: "relative",
         overflow: "hidden",
@@ -123,9 +123,9 @@ export default function HowItWorks() {
           }}
         >
           {steps.map((step, i) => (
-            <div key={step.number} style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
+            <div key={step.number} className="w-full sm:w-auto" style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
               <div
-                className="animate-fade-up"
+                className="animate-fade-up w-full sm:w-auto sm:max-w-[280px]"
                 style={{
                   animationDelay: `${i * 0.15}s`,
                   opacity: 0,
@@ -133,7 +133,6 @@ export default function HowItWorks() {
                   border: "1px solid var(--border)",
                   borderRadius: 20,
                   padding: "32px 28px",
-                  maxWidth: 280,
                   boxShadow: "var(--shadow-md)",
                   transition: "all 0.3s cubic-bezier(0.34, 1.2, 0.64, 1)",
                   cursor: "default",

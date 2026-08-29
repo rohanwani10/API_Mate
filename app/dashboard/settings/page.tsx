@@ -10,9 +10,9 @@ export default function SettingsPage() {
   const projects = useQuery(api.contracts.getProjects);
 
   return (
-    <div style={{ padding: "40px", background: "var(--bg-base)", minHeight: "100vh" }}>
+    <div className="p-4 sm:p-6 lg:p-10" style={{ background: "var(--bg-base)", minHeight: "100vh" }}>
       <div style={{ maxWidth: 900, margin: "0 auto" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px", letterSpacing: "-0.03em" }}>
+        <h1 className="text-[1.6rem] sm:text-[2rem]" style={{ fontWeight: 700, color: "var(--text-primary)", marginBottom: "8px", letterSpacing: "-0.03em" }}>
           Endpoint Controls
         </h1>
         <p style={{ color: "var(--text-secondary)", marginBottom: "32px", fontSize: "0.95rem" }}>
@@ -41,7 +41,7 @@ function ProjectSettingsCard({ project }: { project: any }) {
   const contracts = useQuery(api.contracts.getContracts, { projectId: project._id as Id<"projects"> });
   
   return (
-    <div style={{ background: "var(--bg-elevated)", borderRadius: 16, padding: "24px 32px", boxShadow: "0 4px 24px rgba(0,0,0,0.02)", border: "1px solid var(--border)" }}>
+    <div className="p-5 sm:p-6 lg:px-8 lg:py-6" style={{ background: "var(--bg-elevated)", borderRadius: 16, boxShadow: "0 4px 24px rgba(0,0,0,0.02)", border: "1px solid var(--border)" }}>
        <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--text-primary)", marginBottom: 20 }}>{project.name}</h2>
        
        {contracts === undefined ? (
@@ -94,9 +94,9 @@ function ContractSettingsRow({ contract }: { contract: any }) {
 
   return (
      <div style={{ border: "1px solid var(--border)", borderRadius: 12, padding: 16, background: "var(--bg-base)", transition: "all 0.2sease" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
            <div>
-             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+             <div className="flex-wrap" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                 <h3 style={{ fontWeight: 600, color: "var(--text-primary)", fontSize: "1.05rem" }}>
                   {contract.name}
                 </h3>
@@ -111,8 +111,8 @@ function ContractSettingsRow({ contract }: { contract: any }) {
              </p>
            </div>
            
-           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <button 
+           <div className="flex-wrap" style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <button
                 onClick={handleToggle}
                 disabled={isToggling}
                 style={{
@@ -162,7 +162,7 @@ function ContractSettingsRow({ contract }: { contract: any }) {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                    {data.versions.map((v: any, index: number) => (
-                      <div key={v._id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-elevated)", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border)", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
+                      <div key={v._id} className="flex-wrap gap-3" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--bg-elevated)", padding: "12px 16px", borderRadius: 8, border: "1px solid var(--border)", boxShadow: "0 1px 2px rgba(0,0,0,0.02)" }}>
                          <div>
                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                              <span style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--text-primary)" }}>Version {v.versionNumber}</span>
