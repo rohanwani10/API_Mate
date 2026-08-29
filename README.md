@@ -114,7 +114,14 @@ Switch to the **Dart** or **Java** tab to get model classes generated from your 
 | Two-Stage Mock Data | Fast rule-based generation + optional Gemini enhancement |
 | Live Mock Endpoints | GET returns fake data, POST validates payloads |
 | Intelligent Validation | AJV errors + AI-generated corrected payload suggestions |
-| Code Generation | Dart and Java model classes from any schema |
+| Code Generation | TypeScript, Dart and Java model classes from any schema |
+| Typed TS Client | Generated `fetchX` / `fetchXList` / `postX` helpers wired to your live endpoint |
+| Try It Console | Send any verb against any published version from inside the workspace and see the live response |
+| Request Logs | Every mock request recorded with method, status, duration and query — newest 100 per contract |
+| Deterministic Data | `?seed=` returns byte-identical data every call, so mocks are safe to snapshot-test |
+| Latency Simulation | `?delay=` adds artificial latency (max 10s) for exercising loading states |
+| Error Simulation | `?status=` forces any status code for exercising error paths |
+| CORS Enabled | Mock endpoints are callable from a frontend on any origin |
 | Version Restore | Restore any previous version as a new version |
 | Endpoint Controls | Disable/enable mock endpoints per contract from Settings |
 | Auth & Ownership | All projects are private to the authenticated user |
@@ -160,19 +167,30 @@ Switch to the **Dart** or **Java** tab to get model classes generated from your 
 
 ### Request Flow — Mock Endpoint (GET)
 
+Every verb runs through one shared pipeline (`handleMock`) so rate limiting,
+latency, forced statuses and logging behave identically across GET/POST/PUT/PATCH/DELETE.
+
 ```
-Client GET /api/mock/{contractId}/{version}/{path}?count=10&mode=realistic
+Client GET /api/mock/{contractId}/{version}/{path}?count=10&seed=demo
   → Rate limit check (100 req/IP/60s)
+  → Simulate latency (?delay, clamped to 10s) — applied before everything else
+      so it models real network delay for failures as well as successes
   → Fetch schema from Convex (public.getVersionSchema)
   → Check if endpoint is disabled
-  → Parse query params (count, mode)
-  → Stage 1: Rule-based mock generation (generateSmartMock)
-      - Smart defaults based on field names (email, name, price, etc.)
-      - Handles objects, arrays, primitives
-  → Stage 2 (if mode=realistic & schema < 8KB):
-      - Gemini 2.0-flash enhancement for realistic data
-      - Fallback to Stage 1 if Gemini fails
-  → Return enhanced mock data
+  → If ?status is a non-2xx: return the simulated error envelope, skip the handler
+  → Verb handler:
+      Stage 1: Rule-based mock generation (generateSmartMock)
+        - Honours `format`, `enum`, `example` before falling back to field-name
+          heuristics (email, name, price, createdAt, …)
+        - Seeded by ?seed via mulberry32, with the clock pinned so timestamps
+          are reproducible too
+      Stage 2 (if mode=realistic, no seed, & schema < 8KB):
+        - Gemini 2.0-flash enhancement for realistic data
+        - Fallback to Stage 1 if Gemini fails
+  → If ?status is a 2xx: restamp the status, keep the real body
+  → Attach CORS headers
+  → Log the request via after() — never blocks the response, never fails it
+  → Return
 ```
 
 ### Request Flow — Mock Endpoint (POST / PUT)
@@ -272,6 +290,9 @@ apimate/
 │   ├── Dashboard/
 │   │   └── Sidebar.tsx                   # Persistent left sidebar
 │   ├── SchemaWorkspace.tsx               # Core editor (schema + AI + tabs)
+│   ├── TryItPanel.tsx                    # In-app request console (verb, body, sim params)
+│   ├── RequestLogs.tsx                   # Live request log viewer
+│   ├── CopyButton.tsx                    # Copy-to-clipboard control
 │   ├── ConfirmModal.tsx                  # Reusable destructive action modal
 │   └── ConvexClientProvider.tsx          # Convex context wrapper
 │
@@ -285,7 +306,10 @@ apimate/
 │   └── myFunctions.ts                    # Misc helper functions
 │
 ├── lib/
-│   └── codegen.ts                        # Dart + Java model class generators
+│   ├── codegen.ts                        # TypeScript + Dart + Java generators
+│   ├── codegen.test.ts                   # node --test
+│   ├── mockgen.ts                        # Seeded mock generation + sim param parsing
+│   └── mockgen.test.ts                   # node --test
 │
 ├── public/
 │   └── API MATE.png                      # App icon
@@ -330,7 +354,23 @@ versions
   }>?
   [index: by_contractId]
   [index: by_contractId_version]
+
+requestLogs
+  _id            : Id<"requestLogs">
+  contractId     : Id<"contracts">  ← FK → contracts
+  method         : string           ← GET | POST | PUT | PATCH | DELETE
+  versionNumber  : number
+  status         : number
+  durationMs     : number
+  query          : string?          ← raw query string, truncated to 300 chars
+  error          : string?          ← short reason for a non-2xx, truncated
+  [index: by_contractId]
 ```
+
+> `requestLogs` deliberately stores **no request or response bodies** — only the
+> metadata needed to answer "why did my frontend get a 400?" — so a log row can
+> never leak payload contents. Each insert trims the contract back to its newest
+> 100 rows, so storage per contract is capped regardless of traffic.
 
 ### Cascade Delete
 
@@ -401,6 +441,20 @@ The project was built in phases, each delivering a working slice of functionalit
 - [x] Breaking changes stored on version record
 - [x] Warning display in version history tab
 
+### Phase 10 — Mock Endpoint Simulation & Observability
+- [x] `?seed=` deterministic mock data (mulberry32 PRNG + pinned clock)
+- [x] `?delay=` latency simulation, clamped to 10s
+- [x] `?status=` forced status codes with a simulated error envelope
+- [x] `generateSmartMock` extracted to `lib/mockgen.ts` and unit-tested
+- [x] JSON Schema `format` and non-string `enum` honoured by the generator
+- [x] `requestLogs` table, self-pruning to the newest 100 rows per contract
+- [x] Logs tab with live-updating request history
+- [x] Try It console — any verb, any published version, live response + timing
+- [x] TypeScript codegen with a typed fetch client
+- [x] Copy buttons on endpoint URLs and every generated code tab
+- [x] CORS headers + OPTIONS preflight on mock endpoints
+- [x] Unit tests via `node --test` (no test framework dependency)
+
 ### Phase 9 — Landing Page
 - [x] Header with scroll-aware glassmorphic effect
 - [x] Hero section with dual code card mockup
@@ -425,6 +479,7 @@ The project was built in phases, each delivering a working slice of functionalit
 | Styling | Tailwind CSS | 4.1.18 | Utility classes |
 | Icons | Lucide React | 0.576.0 | Icon set |
 | Utilities | Lodash | 4.17.23 | Data manipulation |
+| Testing | `node --test` | Node 24 | Built-in runner; TypeScript via native type stripping, zero dependencies |
 
 ---
 
@@ -466,6 +521,7 @@ The Convex dashboard will open automatically.
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
 | `npm run lint` | ESLint check |
+| `npm test` | Unit tests for the mock generator and code generators (`node --test`, no framework) |
 
 ---
 
@@ -506,6 +562,23 @@ GET /api/mock/{contractId}/{versionNumber}/{path}
 |---|---|---|---|
 | `count` | integer | — | Number of items to generate. Maximum 50. Only meaningful for object-type schemas. |
 | `mode` | string | `realistic` | `realistic` — Gemini-enhanced data (default). `fast` — Rule-based only, instant response. |
+| `seed` | string | — | Deterministic data: the same seed always returns identical bytes, timestamps included. Implies `mode=fast`, because an LLM cannot be deterministic. Trimmed to 64 chars. |
+| `delay` | integer | `0` | Artificial latency in milliseconds before responding, clamped to 10000. Applies to every verb and to error responses too. |
+| `status` | integer | — | Force a response status (200–599). A non-2xx replaces the body with a simulated error envelope; a 2xx keeps the real body and only restamps the status. |
+
+**Simulation parameters** work on every verb, not just GET:
+
+```bash
+# Deterministic data — safe to snapshot-test against
+curl "$URL?seed=demo"
+
+# A slow endpoint, for building loading states
+curl "$URL?delay=1500"
+
+# A failing endpoint, for building error states
+curl "$URL?status=500"
+# → { "error": "Internal Server Error", "status": 500, "simulated": true, ... }
+```
 
 **Response 200**
 ```json
@@ -632,15 +705,15 @@ Gemini output quality depends on prompt clarity. Very ambiguous prompts may prod
 
 - [ ] **Team Collaboration** — Share projects with other users, role-based access (owner / editor / viewer)
 - [ ] **OpenAPI Import** — Import an existing OpenAPI 3.x spec and auto-generate contracts from all paths
-- [ ] **Response Delay Simulation** — Configure artificial latency per endpoint to simulate real network conditions
-- [ ] **Request Logging** — Log all incoming mock requests with timestamps, headers, and bodies for debugging
+- [x] **Response Delay Simulation** — `?delay=` adds artificial latency to simulate real network conditions
+- [x] **Request Logging** — Mock requests logged with method, status, duration and query, viewable in the Logs tab
 - [ ] **Settings Page** — Account management, API key display, usage stats
 
 ### Medium-term
 
 - [ ] **Webhook Simulation** — Define outbound webhook payloads that fire on a schedule or trigger
 - [ ] **GraphQL Support** — Define GraphQL schemas and get mock resolvers
-- [ ] **SDK Generation** — Generate TypeScript, Python, and Go API clients from contracts
+- [ ] **SDK Generation** — Python and Go API clients (TypeScript already ships in the TS tab)
 - [ ] **Contract Testing** — Run automated tests that validate a real backend against a published contract
 - [ ] **Diff Viewer** — Visual side-by-side diff between any two versions of a schema
 - [ ] **Custom Faker Rules** — Annotate schema fields with custom faker directives (e.g. `x-faker: "internet.email"`)

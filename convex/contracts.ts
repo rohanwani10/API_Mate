@@ -329,3 +329,29 @@ export const restoreVersion = mutation({
     return versionId;
   },
 });
+
+export const getRequestLogs = query({
+  args: { contractId: v.id("contracts") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const contract = await ctx.db.get(args.contractId);
+    if (!contract) return [];
+
+    // Logs are owner-only: they reveal how an endpoint is being exercised.
+    const project = await ctx.db.get(contract.projectId);
+    if (
+      !project ||
+      (project.userId !== identity.subject && project.createdBy !== identity.subject)
+    ) {
+      return [];
+    }
+
+    return await ctx.db
+      .query("requestLogs")
+      .withIndex("by_contractId", (q) => q.eq("contractId", args.contractId))
+      .order("desc")
+      .take(50);
+  },
+});

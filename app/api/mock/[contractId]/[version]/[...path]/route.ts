@@ -1,10 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
-import { fetchQuery } from "convex/nextjs";
+import { NextRequest, NextResponse, after } from "next/server";
+import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import {
+  generateSmartMock,
+  createContext,
+  parseSimParams,
+  simulatedErrorBody,
+  type SimParams,
+} from "@/lib/mockgen";
 
 // ---------------------------------------------------------------------------
 // AJV setup
@@ -14,7 +21,7 @@ addFormats(ajv);
 
 // ---------------------------------------------------------------------------
 // Gemini setup
-// Use gemini-2.5-flash-lite for route.ts (lighter, faster, cheaper).
+// Use gemini-2.0-flash for route.ts (lighter, faster, cheaper).
 // convex/ai.ts uses gemini-2.5-flash (richer, for schema authoring).
 // Both are documented here so the difference is intentional and visible.
 // ---------------------------------------------------------------------------
@@ -79,6 +86,8 @@ const MAX_COUNT = 50; // callers cannot request more than 50 items at once
 // ---------------------------------------------------------------------------
 const MAX_SCHEMA_JSON_LENGTH = 8_000; // ~8 KB of schema text is plenty
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 // ---------------------------------------------------------------------------
 // Fetch schema from Convex
 // ---------------------------------------------------------------------------
@@ -120,137 +129,111 @@ async function getVersionSchema(
 }
 
 // ---------------------------------------------------------------------------
-// Shared preflight for every verb: rate limit, then resolve the contract's
-// schema for this version. Every handler needs both checks before touching
-// its own logic, so centralizing them here means a rate-limit or lookup fix
-// only has to happen in one place instead of five.
+// Request logging
+//
+// Runs inside `after()` so it never adds latency to the response the caller is
+// waiting on, and is fully swallowed on failure: a logging outage must not turn
+// a working mock into a 500.
 // ---------------------------------------------------------------------------
-async function withVersionSchema(
-  request: NextRequest,
-  context: { params: Promise<{ contractId: string; version: string }> },
-  handler: (schema: any) => Promise<NextResponse>
-): Promise<NextResponse> {
-  if (!checkRateLimit(request)) {
-    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
-  }
+function logRequest(entry: {
+  contractId: string;
+  version: string;
+  method: string;
+  status: number;
+  durationMs: number;
+  query: string;
+  error?: string;
+}) {
+  const versionNumber = parseInt(entry.version, 10);
+  if (isNaN(versionNumber)) return;
 
-  const { contractId, version } = await context.params;
-
-  const { schema, error, status } = await getVersionSchema(contractId, version);
-  if (error) {
-    return NextResponse.json({ error }, { status });
-  }
-
-  return handler(schema);
+  after(async () => {
+    try {
+      await fetchMutation(api.public.logRequest, {
+        contractId: entry.contractId as Id<"contracts">,
+        method: entry.method,
+        versionNumber,
+        status: entry.status,
+        durationMs: entry.durationMs,
+        query: entry.query || undefined,
+        error: entry.error,
+      });
+    } catch {
+      // Intentionally silent — see the comment above.
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
-// Rule-based mock generator (Stage 1 — no AI cost)
+// Shared pipeline for every verb.
+//
+// Rate limiting, latency simulation, schema lookup, forced-status simulation
+// and request logging are identical for GET/POST/PUT/PATCH/DELETE, so they live
+// here once. Each verb supplies only the part that actually differs: what to do
+// with the resolved schema.
 // ---------------------------------------------------------------------------
-function generateSmartMock(schema: any, propName = ""): any {
-  if (!schema) return null;
+async function handleMock(
+  request: NextRequest,
+  context: { params: Promise<{ contractId: string; version: string }> },
+  handler: (schema: any, sim: SimParams) => Promise<NextResponse>
+): Promise<NextResponse> {
+  const startedAt = Date.now();
+  const { contractId, version } = await context.params;
+  const { searchParams } = new URL(request.url);
+  const sim = parseSimParams(searchParams);
 
-  const type = schema.type;
-  const name = propName.toLowerCase();
-  const desc = (schema.description || "").toLowerCase();
+  let response: NextResponse;
+  let errorNote: string | undefined;
 
-  if (schema.example) return schema.example;
-  if (Array.isArray(schema.examples) && schema.examples.length > 0) {
-    return schema.examples[0];
-  }
+  if (!checkRateLimit(request)) {
+    response = NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
+    errorNote = "Rate limit exceeded";
+  } else {
+    // Latency is simulated up front so it models real network delay for every
+    // outcome, including the simulated failures below.
+    if (sim.delayMs > 0) await sleep(sim.delayMs);
 
-  if (type === "array") {
-    const count = schema.minItems ?? 2;
-    return Array.from({ length: count }, () =>
-      generateSmartMock(schema.items ?? {}, propName)
-    );
-  }
+    const { schema, error, status } = await getVersionSchema(contractId, version);
 
-  if (type === "object" || schema.properties) {
-    const obj: Record<string, unknown> = {};
-    if (schema.properties) {
-      for (const [key, value] of Object.entries(schema.properties)) {
-        obj[key] = generateSmartMock(value, key);
+    if (error) {
+      response = NextResponse.json({ error }, { status });
+      errorNote = error;
+    } else if (sim.status !== null && (sim.status < 200 || sim.status >= 300)) {
+      // A forced failure replaces the body entirely — there is no successful
+      // result to report alongside a 500.
+      const body = simulatedErrorBody(sim.status);
+      response = NextResponse.json(body, { status: sim.status });
+      errorNote = body.error;
+    } else {
+      response = await handler(schema, sim);
+
+      // A forced 2xx (say 202 Accepted) keeps the real body and only restamps
+      // the status, so clients can exercise alternate success paths too.
+      if (sim.status !== null && response.status !== sim.status) {
+        response = new NextResponse(response.body, {
+          status: sim.status,
+          headers: response.headers,
+        });
       }
+      if (response.status >= 400) errorNote = "HTTP " + response.status;
     }
-    return obj;
   }
 
-  if (type === "string") {
-    if (schema.enum && Array.isArray(schema.enum)) return schema.enum[0];
-    if (name.includes("email") || desc.includes("email"))
-      return "user123@gmail.com";
-    if (name.includes("first") && name.includes("name")) return "John";
-    if (name.includes("last") && name.includes("name")) return "Doe";
-    if (name.includes("name") || desc.includes("name"))
-      return "Wireless Bluetooth Headphones";
-    if (name.includes("desc") || desc.includes("desc"))
-      return "High quality wireless headphones with noise cancellation";
-    if (
-      name.includes("city") ||
-      desc.includes("city") ||
-      name.includes("location") ||
-      desc.includes("location")
-    )
-      return "Mumbai";
-    if (
-      name.includes("url") ||
-      name.includes("link") ||
-      desc.includes("url") ||
-      desc.includes("link")
-    )
-      return "https://example.com/item";
-    if (name.includes("uuid") || name.includes("id"))
-      return "a1b2c3d4-e5f6-7890-1234-56789abcdef0";
-    if (name.includes("date") || desc.includes("date"))
-      return new Date().toISOString().split("T")[0];
-    if (name.includes("time") || desc.includes("time"))
-      return new Date().toISOString();
-    if (name.includes("avatar") || name.includes("image"))
-      return "https://example.com/avatar.jpg";
-    if (name.includes("phone")) return "+1-555-0198";
-    if (name.includes("status")) return "active";
-    return "Sample text";
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
   }
 
-  if (type === "number" || type === "integer") {
-    const min = schema.minimum ?? 1;
-    const max = schema.maximum ?? 1000;
-    if (
-      name.includes("price") ||
-      desc.includes("price") ||
-      name.includes("cost") ||
-      desc.includes("cost")
-    )
-      return Math.floor(Math.random() * 4900) + 100;
-    if (name.includes("age") || desc.includes("age"))
-      return Math.floor(Math.random() * 47) + 18;
-    if (
-      name.includes("stock") ||
-      name.includes("qty") ||
-      name.includes("quantity")
-    )
-      return type === "integer"
-        ? Math.floor(Math.random() * 100)
-        : +(Math.random() * 100).toFixed(2);
-    if (name.includes("rating")) return +(Math.random() * 4 + 1).toFixed(1);
-    if (type === "integer")
-      return Math.floor(Math.random() * (max - min + 1)) + min;
-    return Math.round((Math.random() * (max - min) + min) * 100) / 100;
-  }
+  logRequest({
+    contractId,
+    version,
+    method: request.method,
+    status: response.status,
+    durationMs: Date.now() - startedAt,
+    query: searchParams.toString(),
+    error: errorNote,
+  });
 
-  if (type === "boolean") {
-    if (
-      name.includes("active") ||
-      name.includes("enabled") ||
-      name.includes("is") ||
-      name.includes("has")
-    )
-      return true;
-    return Math.random() > 0.5;
-  }
-
-  return null;
+  return response;
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +243,7 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  return withVersionSchema(request, context, async (schema) => {
+  return handleMock(request, context, async (schema, sim) => {
     try {
       const { searchParams } = new URL(request.url);
 
@@ -278,21 +261,26 @@ export async function GET(
         count = Math.min(parsed, MAX_COUNT); // silently clamp to MAX_COUNT
       }
 
-      const modeParam = searchParams.get("mode") ?? "realistic";
+      // A seed promises the same bytes on every call and an LLM cannot promise
+      // that, so seeding implies the deterministic rule-based path.
+      const modeParam = sim.seed
+        ? "fast"
+        : (searchParams.get("mode") ?? "realistic");
 
       // --- Stage 1: fast rule-based generation ---
+      const ctx = createContext(sim.seed);
       let baselineMock: unknown;
       if (schema.type === "object" && count && count > 0) {
         baselineMock = Array.from({ length: count }, () =>
-          generateSmartMock(schema)
+          generateSmartMock(schema, "", ctx)
         );
       } else if (schema.type === "array" && count && count > 0) {
         const cloned = JSON.parse(JSON.stringify(schema));
         cloned.minItems = count;
         cloned.maxItems = count;
-        baselineMock = generateSmartMock(cloned);
+        baselineMock = generateSmartMock(cloned, "", ctx);
       } else {
-        baselineMock = generateSmartMock(schema);
+        baselineMock = generateSmartMock(schema, "", ctx);
       }
 
       // Bypass AI if fast mode requested
@@ -442,22 +430,13 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  if (!checkRateLimit(request)) {
-    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
-  }
-
-  const { contractId, version } = await context.params;
-
-  const { schema, error, status } = await getVersionSchema(contractId, version);
-  if (error) {
-    return NextResponse.json({ error }, { status });
-  }
-
-  return validateBodyAgainstSchema(request, schema, {
-    successStatus: 201,
-    successMessage: "Payload matches the contract. Resource created.",
-    strict: true,
-  });
+  return handleMock(request, context, (schema) =>
+    validateBodyAgainstSchema(request, schema, {
+      successStatus: 201,
+      successMessage: "Payload matches the contract. Resource created.",
+      strict: true,
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -467,22 +446,13 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  if (!checkRateLimit(request)) {
-    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
-  }
-
-  const { contractId, version } = await context.params;
-
-  const { schema, error, status } = await getVersionSchema(contractId, version);
-  if (error) {
-    return NextResponse.json({ error }, { status });
-  }
-
-  return validateBodyAgainstSchema(request, schema, {
-    successStatus: 200,
-    successMessage: "Payload matches the contract. Resource replaced.",
-    strict: true,
-  });
+  return handleMock(request, context, (schema) =>
+    validateBodyAgainstSchema(request, schema, {
+      successStatus: 200,
+      successMessage: "Payload matches the contract. Resource replaced.",
+      strict: true,
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -494,49 +464,49 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  if (!checkRateLimit(request)) {
-    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
-  }
-
-  const { contractId, version } = await context.params;
-
-  const { schema, error, status } = await getVersionSchema(contractId, version);
-  if (error) {
-    return NextResponse.json({ error }, { status });
-  }
-
-  return validateBodyAgainstSchema(request, schema, {
-    successStatus: 200,
-    successMessage: "Payload matches the contract. Resource partially updated.",
-    strict: false,
-  });
+  return handleMock(request, context, (schema) =>
+    validateBodyAgainstSchema(request, schema, {
+      successStatus: 200,
+      successMessage: "Payload matches the contract. Resource partially updated.",
+      strict: false,
+    })
+  );
 }
 
 // ---------------------------------------------------------------------------
-// DELETE — no body to validate; confirms the contract/version exists and
-// is enabled (reusing the same lookup GET/POST use), then simulates removal.
+// DELETE — no body to validate; the shared pipeline has already confirmed the
+// contract/version exists and is enabled, so this just simulates removal.
 // ---------------------------------------------------------------------------
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ contractId: string; version: string }> }
 ) {
-  if (!checkRateLimit(request)) {
-    return NextResponse.json({ error: "Too Many Requests" }, { status: 429 });
-  }
-
-  const { contractId, version } = await context.params;
-
-  const { error, status } = await getVersionSchema(contractId, version);
-  if (error) {
-    return NextResponse.json({ error }, { status });
-  }
-
-  return NextResponse.json(
-    {
-      success: true,
-      message: "Resource deleted.",
-      deletedAt: new Date().toISOString(),
-    },
-    { status: 200 }
+  return handleMock(request, context, async () =>
+    NextResponse.json(
+      {
+        success: true,
+        message: "Resource deleted.",
+        deletedAt: new Date().toISOString(),
+      },
+      { status: 200 }
+    )
   );
+}
+
+// ---------------------------------------------------------------------------
+// CORS
+//
+// Mock endpoints exist to be called from a frontend on a different origin —
+// localhost:5173 hitting a deployed ApiMate, say. Without these headers every
+// such call fails in the browser, which defeats the point of the product.
+// ---------------------------------------------------------------------------
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Max-Age": "86400",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
 }

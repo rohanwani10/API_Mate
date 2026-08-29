@@ -4,9 +4,56 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Sparkles, AlertTriangle, Code, History, Play, Link as LinkIcon, Smartphone, Coffee } from "lucide-react";
+import { ArrowLeft, Sparkles, AlertTriangle, Code, History, Play, Link as LinkIcon, Smartphone, Coffee, ScrollText, FileCode2 } from "lucide-react";
 import Link from "next/link";
-import { generateDartCode, generateJavaCode } from "@/lib/codegen";
+import { generateDartCode, generateJavaCode, generateTypeScriptCode } from "@/lib/codegen";
+import { buildMockUrl } from "@/lib/mockgen";
+import CopyButton from "./CopyButton";
+import TryItPanel from "./TryItPanel";
+import RequestLogs from "./RequestLogs";
+
+type Tab = "history" | "try" | "logs" | "mock" | "ts" | "dart" | "java";
+
+const TABS: Tab[] = ["history", "try", "logs", "mock", "ts", "dart", "java"];
+
+const TAB_LABELS: Record<Tab, string> = {
+  history: "History",
+  try: "Try It",
+  logs: "Logs",
+  mock: "Endpoints",
+  ts: "TypeScript",
+  dart: "Dart",
+  java: "Java",
+};
+
+/**
+ * Derives a usable type/class name from the contract name, so generated code
+ * says `UserProfile` rather than a generic placeholder. Falls back when the
+ * name has no usable letters (e.g. "123" or "///").
+ */
+function toPascalCase(name: string): string {
+  const cleaned = name
+    .replace(/[^A-Za-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join("");
+  return /^[A-Za-z]/.test(cleaned) ? cleaned : "ContractModel";
+}
+
+/** A read-only code view with a copy button in its header. */
+function CodePane({ code, tone }: { code: string; tone: string }) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex justify-end px-4 py-2 border-b border-[var(--border)] bg-[var(--bg-base)] shrink-0">
+        <CopyButton text={code} />
+      </div>
+      <pre className={`m-0 p-6 w-full flex-1 overflow-auto font-mono text-[0.875rem] leading-relaxed ${tone}`}>
+        {code}
+      </pre>
+    </div>
+  );
+}
 
 export default function SchemaWorkspace({
   projectId,
@@ -26,7 +73,7 @@ export default function SchemaWorkspace({
   const [publishError, setPublishError] = useState("");
   
   // New tab state: 'history' instead of 'editor' since editor is always visible
-  const [activeTab, setActiveTab] = useState<"history" | "dart" | "java" | "mock">("history");
+  const [activeTab, setActiveTab] = useState<Tab>("history");
 
   const [mockBaseUrl, setMockBaseUrl] = useState("");
 
@@ -104,13 +151,21 @@ export default function SchemaWorkspace({
 
   const { contract, versions } = data;
   const latestVersion = versions[0];
+  const modelName = toPascalCase(contract.name);
+  const endpointUrl =
+    latestVersion && mockBaseUrl
+      ? buildMockUrl(mockBaseUrl, contract._id, latestVersion.versionNumber, contract.path)
+      : undefined;
 
   const getTabIcon = (tab: string) => {
     switch (tab) {
       case "history": return <History size={16} />;
+      case "try": return <Play size={16} />;
+      case "logs": return <ScrollText size={16} />;
+      case "mock": return <LinkIcon size={16} />;
+      case "ts": return <FileCode2 size={16} />;
       case "dart": return <Smartphone size={16} />;
       case "java": return <Coffee size={16} />;
-      case "mock": return <LinkIcon size={16} />;
       default: return null;
     }
   };
@@ -205,14 +260,14 @@ export default function SchemaWorkspace({
         <div className="panel flex flex-col h-full min-h-0 overflow-hidden shadow-[var(--shadow-sm)] border-[var(--border)] bg-[var(--bg-elevated)]">
           {/* Tabs */}
           <div className="flex items-center gap-1.5 px-3 py-2.5 border-b border-[var(--border)] bg-[var(--bg-base)] overflow-x-auto scrollbar-hide shrink-0">
-            {(["history", "dart", "java", "mock"] as const).map((tab) => (
+            {TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className={`flex items-center gap-2 text-[0.75rem] font-bold uppercase tracking-wider px-4 py-2 rounded-lg border-none cursor-pointer transition-all duration-200 shrink-0 ${activeTab === tab ? "bg-[var(--bg-elevated)] text-[var(--text-primary)] shadow-sm ring-1 ring-[var(--border-strong)]" : "bg-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-elevated)]/50"}`}
               >
                 {getTabIcon(tab)}
-                {tab}
+                {TAB_LABELS[tab]}
               </button>
             ))}
           </div>
@@ -261,18 +316,35 @@ export default function SchemaWorkspace({
               </div>
             )}
 
+            {/* TRY IT TAB */}
+            {activeTab === "try" && (
+              <TryItPanel
+                contractId={contract._id}
+                contractPath={contract.path}
+                versionNumbers={versions.map((v) => v.versionNumber)}
+                baseUrl={mockBaseUrl}
+              />
+            )}
+
+            {/* LOGS TAB */}
+            {activeTab === "logs" && <RequestLogs contractId={contract._id} />}
+
+            {/* TYPESCRIPT TAB */}
+            {activeTab === "ts" && (
+              <CodePane
+                tone="text-[#1d4ed8]"
+                code={generateTypeScriptCode(modelName, schemaInput, endpointUrl)}
+              />
+            )}
+
             {/* DART TAB */}
             {activeTab === "dart" && (
-              <pre className="m-0 p-6 w-full h-full overflow-auto font-mono text-[0.875rem] text-[#005b9f] leading-relaxed">
-                {generateDartCode("ContractModel", schemaInput)}
-              </pre>
+              <CodePane tone="text-[#005b9f]" code={generateDartCode(modelName, schemaInput)} />
             )}
 
             {/* JAVA TAB */}
             {activeTab === "java" && (
-              <pre className="m-0 p-6 w-full h-full overflow-auto font-mono text-[0.875rem] text-[#b07000] leading-relaxed">
-                {generateJavaCode("ContractModel", schemaInput)}
-              </pre>
+              <CodePane tone="text-[#b07000]" code={generateJavaCode(modelName, schemaInput)} />
             )}
 
             {/* MOCK ENDPOINTS TAB */}
@@ -314,18 +386,47 @@ export default function SchemaWorkspace({
                         className="bg-[var(--bg-elevated)] border border-[var(--border-strong)] rounded-[var(--radius-lg)] p-5 shadow-sm transition-hover hover:border-[var(--accent-glow)]"
                       >
                         <div className="flex items-center gap-3 mb-3">
-                          <span className={`${ep.badgeClass} px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider`}>
+                          <span className={`${ep.badgeClass} px-2.5 py-1 rounded-md text-[0.75rem] font-bold tracking-wider shrink-0`}>
                             {ep.method}
                           </span>
                           <span className="font-mono text-[0.85rem] text-[var(--text-primary)] break-all font-medium">
-                            {mockBaseUrl}/api/mock/{contract._id}/{latestVersion.versionNumber}{contract.path}
+                            {endpointUrl}
                           </span>
+                          <div className="ml-auto">
+                            <CopyButton text={endpointUrl ?? ""} />
+                          </div>
                         </div>
                         <p className="m-0 text-[0.85rem] text-[var(--text-secondary)] leading-relaxed">
                           {ep.desc}
                         </p>
                       </div>
                     ))}
+
+                    {/* Simulation params reference — otherwise these are
+                        undiscoverable without reading the source. */}
+                    <div className="bg-[var(--bg-base)] border border-[var(--border)] rounded-[var(--radius-lg)] p-5">
+                      <h3 className="text-[0.75rem] font-bold uppercase tracking-wider text-[var(--text-secondary)] m-0 mb-3">
+                        Query Parameters
+                      </h3>
+                      <div className="flex flex-col gap-2.5">
+                        {[
+                          ["?count=10", "Return an array of N items (max 50)."],
+                          ["?seed=demo", "Deterministic data — the same seed always returns the same bytes. Ideal for snapshot tests."],
+                          ["?delay=800", "Wait N ms before responding (max 10000), to exercise loading states."],
+                          ["?status=500", "Force a status code, to exercise error handling."],
+                          ["?mode=fast", "Skip AI enhancement for an instant response."],
+                        ].map(([param, desc]) => (
+                          <div key={param} className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-3">
+                            <code className="font-mono text-[0.8rem] text-[var(--accent)] bg-[var(--accent-light)] px-2 py-0.5 rounded shrink-0 w-fit sm:w-[110px]">
+                              {param}
+                            </code>
+                            <span className="text-[0.82rem] text-[var(--text-secondary)] leading-relaxed">
+                              {desc}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="bg-orange-50/50 border border-orange-200 text-orange-700 p-5 rounded-[var(--radius-lg)] text-[0.95rem] font-medium flex items-center gap-3 shadow-sm">

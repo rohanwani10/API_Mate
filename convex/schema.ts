@@ -31,4 +31,17 @@ export default defineSchema({
     ),
   }).index("by_contractId", ["contractId"])
     .index("by_contractId_version", ["contractId", "versionNumber"]),
+
+  // One row per request that reaches a mock endpoint. Deliberately stores no
+  // request or response bodies — only the metadata needed to answer "why did my
+  // frontend get a 400?" — so a log row can never leak payload contents.
+  requestLogs: defineTable({
+    contractId: v.id("contracts"),
+    method: v.string(),
+    versionNumber: v.number(),
+    status: v.number(),
+    durationMs: v.number(),
+    query: v.optional(v.string()),   // raw query string, e.g. "count=5&seed=demo"
+    error: v.optional(v.string()),   // short reason for a non-2xx, truncated
+  }).index("by_contractId", ["contractId"]),
 });
