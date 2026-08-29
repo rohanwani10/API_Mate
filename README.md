@@ -59,9 +59,10 @@ Define Schema  →  Publish  →  Get a Live Endpoint  →  Build Your UI  →  
 | ⚠️ | **Breaking Change Detection** | Automatically flags removed fields, changed types, and new requirements between versions |
 | ✅ | **Request Validation** | Send real payloads to your mock endpoint and get instant pass/fail feedback with AI-suggested fixes |
 | 🎭 | **Realistic Fake Data** | Responses use believable values (names, emails, prices, dates) instead of `"string"` and `"foo"` |
-| 💻 | **Client Code Generation** | Generate ready-to-use Dart and Java model classes straight from a schema |
+| 💻 | **Client Code Generation** | Generate TypeScript, Dart and Java models from a schema — TypeScript also ships a typed `fetch`/`post` client wired to your live endpoint |
 | ⏪ | **Version History** | Every version is kept and can be restored at any time |
 | 🔐 | **Private by Default** | Every project is scoped to its owner — nothing is public unless you make it so |
+| 🚦 | **Endpoint Controls** | Disable or re-enable a contract's mock endpoint at any time from Settings |
 | 🧪 | **Try It Console** | Send any verb against any published version from inside the workspace and read the live response |
 | 📊 | **Request Logs** | Every mock request is recorded with method, status, duration and query — newest 100 per contract |
 | 🎛️ | **Endpoint Simulation** | `?seed`, `?delay` and `?status` make mocks deterministic, slow, or failing on demand |
@@ -130,7 +131,7 @@ flowchart LR
     UI -- "generate / refine schema" --> AI
     DB -- "serves published schema" --> Mock
     Mock -- "enhance & validate" --> AI
-    Frontend -- "GET / POST requests" --> Mock
+    Frontend -- "GET / POST / PUT / PATCH / DELETE" --> Mock
     Mock -- "realistic mock data" --> Frontend
 ```
 
@@ -172,6 +173,7 @@ The app runs at `http://localhost:3000`.
 | `npm run build` | Creates a production build |
 | `npm run start` | Serves the production build |
 | `npm run lint` | Checks code quality |
+| `npm test` | Runs the mock-generation and codegen unit tests |
 
 <br>
 
@@ -198,9 +200,22 @@ CLERK_SECRET_KEY=sk_...
 Once a schema is published, it's live at:
 
 ```
-GET  /api/mock/{contractId}/{versionNumber}/{path}    # fetch mock data
-POST /api/mock/{contractId}/{versionNumber}/{path}    # validate a payload
+GET     /api/mock/{contractId}/{versionNumber}/{path}
+POST    /api/mock/{contractId}/{versionNumber}/{path}
+PUT     /api/mock/{contractId}/{versionNumber}/{path}
+PATCH   /api/mock/{contractId}/{versionNumber}/{path}
+DELETE  /api/mock/{contractId}/{versionNumber}/{path}
 ```
+
+| Verb | Behaviour |
+|---|---|
+| `GET` | Returns mock data generated from the schema |
+| `POST` | Validates the payload as a create — the full schema, including `required`, must be satisfied |
+| `PUT` | Validates the payload as a full replace — same strict rules as `POST` |
+| `PATCH` | Validates the payload as a partial update — top-level `required` is relaxed, so omitted fields don't fail |
+| `DELETE` | Takes no body; confirms the contract exists and returns `{ success, deletedAt }` |
+
+`OPTIONS` is handled automatically for CORS preflight, and every response carries CORS headers — mock endpoints are callable from a frontend on any origin.
 
 **Fetching mock data**
 
@@ -212,7 +227,7 @@ curl https://your-app.com/api/mock/abc123/1/users
 { "id": 1847, "name": "Jordan Lee", "email": "j.lee@acme.io", "role": "admin" }
 ```
 
-Add `?count=5` to get an array of items, or `?mode=fast` to skip AI enhancement for instant responses.
+Add `?count=5` to get an array of items (capped at 50), or `?mode=fast` to skip AI enhancement for instant responses.
 
 **Simulating real-world conditions**
 
@@ -243,7 +258,19 @@ curl -X POST https://your-app.com/api/mock/abc123/1/users \
 }
 ```
 
-Mock endpoints are rate-limited to 100 requests per IP per 60 seconds. Full endpoint behavior, response codes, and internals are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+**Partial updates and deletes**
+
+```bash
+# PATCH — only the fields you send are checked
+curl -X PATCH https://your-app.com/api/mock/abc123/1/users \
+  -H "Content-Type: application/json" \
+  -d '{"role": "admin"}'
+
+# DELETE — no body required
+curl -X DELETE https://your-app.com/api/mock/abc123/1/users
+```
+
+Mock endpoints are rate-limited to 100 requests per IP per 60 seconds. The counter lives in Convex rather than process memory, so the limit holds even when the route is spread across serverless instances. Full endpoint behavior, response codes, and internals are documented in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 <br>
 
@@ -262,11 +289,13 @@ Mock endpoints are rate-limited to 100 requests per IP per 60 seconds. Full endp
 
 ## Deploying to Production
 
-ApiMate's mock endpoints rely on fully dynamic API routes. Before deploying, confirm your hosting platform supports this:
+ApiMate's mock endpoints are fully dynamic API routes, rendered on demand. They run anywhere Next.js server rendering does:
 
+- ✅ **Vercel** — what the [live demo](https://api-mate-gamma.vercel.app) runs on
 - ✅ **Node.js server** (`npm run build && npm start`)
 - ✅ **Docker / containerized environments**
-- ⚠️ **Vercel Hobby / static-first platforms** may need adaptation for dynamic route segments
+
+Rate-limit counters are stored in Convex, not in process memory, so horizontal scaling across serverless instances doesn't weaken the limit. Set `GEMINI_API_KEY` in your Convex deployment's environment variables — the AI features are the only part that needs it, and they degrade gracefully (falling back to rule-based mock data) if it's absent or the call fails.
 
 For a deeper look at the architecture, data model, and security design, see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
@@ -280,20 +309,29 @@ For a deeper look at the architecture, data model, and security design, see [`do
 ```
 apimate/
 ├── app/
-│   ├── api/mock/[contractId]/[version]/[...path]/   # Live mock endpoint
-│   ├── dashboard/                                    # Authenticated app (projects, contracts, settings)
-│   └── page.tsx                                      # Public landing page
+│   ├── api/mock/[contractId]/[version]/[...path]/  # Live mock endpoint (all verbs)
+│   ├── dashboard/                                  # Authenticated app (projects, contracts, settings)
+│   └── page.tsx                                    # Public landing page
 ├── components/
-│   ├── Home/                                          # Landing page sections
-│   ├── Dashboard/                                      # Dashboard UI
-│   └── SchemaWorkspace.tsx                            # Core schema editor + AI assistant
+│   ├── Home/                                       # Landing page sections
+│   ├── Dashboard/                                  # Dashboard shell & sidebar
+│   ├── SchemaWorkspace.tsx                         # Schema editor, AI assistant, codegen tabs
+│   ├── TryItPanel.tsx                              # In-app console for calling a live endpoint
+│   ├── RequestLogs.tsx                             # Recent requests for a contract
+│   └── CopyButton.tsx                              # Shared copy-to-clipboard control
 ├── convex/
-│   ├── schema.ts                                       # Database schema
-│   ├── contracts.ts                                    # Project/contract/version logic
-│   ├── ai.ts                                           # AI schema generation
-│   └── utils.ts                                        # Breaking change detection
-├── lib/codegen.ts                                       # Dart + Java code generators
-└── public/                                              # Static assets
+│   ├── schema.ts                                   # Database schema
+│   ├── contracts.ts                                # Project/contract/version logic
+│   ├── public.ts                                   # Unauthenticated reads + request logging
+│   ├── rateLimit.ts                                # Shared cross-instance rate-limit counters
+│   ├── ai.ts                                       # AI schema generation
+│   └── utils.ts                                    # Breaking change detection
+├── lib/
+│   ├── mockgen.ts                                  # Deterministic mock data + simulation params
+│   ├── codegen.ts                                  # TypeScript, Dart & Java generators
+│   └── *.test.ts                                   # Unit tests (`npm test`)
+├── docs/ARCHITECTURE.md                            # Deeper technical reference
+└── public/                                         # Static assets
 ```
 
 </details>
@@ -305,13 +343,12 @@ apimate/
 **Coming next**
 - Team collaboration with role-based access
 - Import existing OpenAPI specs
-- Configurable response delay simulation
-- Request logging for debugging
+- Persistent, searchable request history beyond the newest 100 per contract
 
 **Planned**
 - Webhook simulation
 - GraphQL support
-- Auto-generated SDKs (TypeScript, Python, Go)
+- Auto-generated SDKs for more languages (Python, Go)
 - Contract testing against real backends
 
 See the full list in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#roadmap).
