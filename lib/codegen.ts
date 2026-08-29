@@ -1,3 +1,5 @@
+import type { JsonSchema } from './mockgen';
+
 export function generateDartCode(className: string, schemaStr: string): string {
     try {
         const schema = JSON.parse(schemaStr);
@@ -10,7 +12,7 @@ export function generateDartCode(className: string, schemaStr: string): string {
         const required = schema.required || [];
 
         // Fields
-        for (const [key, value] of Object.entries<any>(props)) {
+        for (const [key, value] of Object.entries<JsonSchema>(props)) {
             let dartType = 'dynamic';
             if (value.type === 'string') dartType = 'String';
             else if (value.type === 'number' || value.type === 'integer') dartType = 'num';
@@ -22,7 +24,7 @@ export function generateDartCode(className: string, schemaStr: string): string {
 
         // Constructor
         dartCode += `\n  ${className}({\n`;
-        for (const [key, value] of Object.entries<any>(props)) {
+        for (const key of Object.keys(props)) {
             const isReq = required.includes(key) ? 'required ' : '';
             dartCode += `    ${isReq}this.${key},\n`;
         }
@@ -31,7 +33,7 @@ export function generateDartCode(className: string, schemaStr: string): string {
         // fromJson
         dartCode += `  factory ${className}.fromJson(Map<String, dynamic> json) {\n`;
         dartCode += `    return ${className}(\n`;
-        for (const [key, value] of Object.entries<any>(props)) {
+        for (const key of Object.keys(props)) {
             dartCode += `      ${key}: json['${key}'],\n`;
         }
         dartCode += `    );\n  }\n\n`;
@@ -39,7 +41,7 @@ export function generateDartCode(className: string, schemaStr: string): string {
         // toJson
         dartCode += `  Map<String, dynamic> toJson() {\n`;
         dartCode += `    return {\n`;
-        for (const [key, value] of Object.entries<any>(props)) {
+        for (const key of Object.keys(props)) {
             dartCode += `      '${key}': ${key},\n`;
         }
         dartCode += `    };\n  }\n`;
@@ -64,7 +66,7 @@ export function generateJavaCode(className: string, schemaStr: string): string {
         const props = schema.properties;
 
         // Fields
-        for (const [key, value] of Object.entries<any>(props)) {
+        for (const [key, value] of Object.entries<JsonSchema>(props)) {
             let javaType = 'Object';
             if (value.type === 'string') javaType = 'String';
             else if (value.type === 'number') javaType = 'Double';
@@ -76,7 +78,7 @@ export function generateJavaCode(className: string, schemaStr: string): string {
         }
 
         // Getters & Setters
-        for (const [key, value] of Object.entries<any>(props)) {
+        for (const [key, value] of Object.entries<JsonSchema>(props)) {
              let javaType = 'Object';
              if (value.type === 'string') javaType = 'String';
              else if (value.type === 'number') javaType = 'Double';
@@ -119,7 +121,7 @@ function tsKey(key: string): string {
 }
 
 /** Turn a schema node into a TypeScript type expression. */
-function tsType(node: any, indent: string): string {
+function tsType(node: JsonSchema, indent: string): string {
     if (!node || typeof node !== 'object') return 'unknown';
 
     // An enum is more precise than the type it sits on, so it wins.
@@ -144,7 +146,7 @@ function tsType(node: any, indent: string): string {
         }
         const required: string[] = Array.isArray(node.required) ? node.required : [];
         const inner = indent + '  ';
-        const lines = Object.entries<any>(node.properties).map(([key, value]) => {
+        const lines = Object.entries<JsonSchema>(node.properties).map(([key, value]) => {
             const optional = required.includes(key) ? '' : '?';
             return `${inner}${tsKey(key)}${optional}: ${tsType(value, inner)};`;
         });

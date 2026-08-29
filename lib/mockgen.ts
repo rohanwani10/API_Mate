@@ -1,6 +1,12 @@
 // Pure mock-data generation — deliberately free of framework imports so it can
 // be exercised directly with `node --test lib/mockgen.test.ts`.
 
+// A JSON Schema document is an arbitrary, author-defined shape; typing it
+// properly would mean re-encoding the JSON Schema spec. This alias confines
+// that dynamism — and the lint suppression — to one declaration.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type JsonSchema = any;
+
 export type MockContext = {
   rng: () => number;
   now: Date;
@@ -44,9 +50,12 @@ function pick<T>(items: T[], ctx: MockContext): T {
 // Rule-based mock generator (Stage 1 — no AI cost, always succeeds)
 // ---------------------------------------------------------------------------
 export function generateSmartMock(
-  schema: any,
+  schema: JsonSchema,
   propName = "",
   ctx: MockContext = createContext()
+  // Returns the generated value, whose shape is dictated by the caller's
+  // schema — `unknown` here would just push a cast onto every call site.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   if (!schema) return null;
 
